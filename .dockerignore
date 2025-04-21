@@ -1,0 +1,51 @@
+# Git
+.git
+.gitignore
+
+# 日志文件
+*.log
+logs/
+
+# 数据目录
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 环境文件 (不复制.env文件，而是通过volumes挂载)
+.env
+.env.*
+!.env.example
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 其他
+*.swp
+*.swo
+.DS_Store
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project 
