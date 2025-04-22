@@ -283,6 +283,8 @@ class ExchangeClient:
                 formatted_amount = "{:.2f}".format(float(amount))
             elif asset == 'BNB':
                 formatted_amount = "{:.8f}".format(float(amount))
+            elif asset == 'SOL':
+                formatted_amount = "{:.8f}".format(float(amount))
             else:
                 formatted_amount = str(amount)
             
@@ -317,6 +319,8 @@ class ExchangeClient:
                 formatted_amount = "{:.2f}".format(float(amount))  # USDT保留2位小数
             elif asset == 'BNB':
                 formatted_amount = "{:.8f}".format(float(amount))  # BNB保留8位小数
+            elif asset == 'SOL':
+                formatted_amount = "{:.8f}".format(float(amount))  # SOL保留8位小数
             else:
                 formatted_amount = str(amount)
             
@@ -327,6 +331,7 @@ class ExchangeClient:
                 'timestamp': int(time.time() * 1000 + self.time_diff)
             }
             self.logger.info(f"开始申购: {formatted_amount} {asset} 到活期理财")
+            self.logger.info(f"申购参数: {params}")
             result = await self.exchange.sapi_post_simple_earn_flexible_subscribe(params)
             self.logger.info(f"划转成功: {result}")
             
