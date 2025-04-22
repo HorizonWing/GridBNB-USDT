@@ -4,7 +4,7 @@ import logging
 
 load_dotenv()
 
-SYMBOL = 'BNB/USDT'
+SYMBOL = os.getenv('SYMBOL') if os.getenv('SYMBOL') else 'BNB/USDT'
 INITIAL_GRID = 2.0
 FLIP_THRESHOLD = lambda grid_size: (grid_size / 5) / 100  # 网格大小的1/5的1%
 POSITION_SCALE_FACTOR = 0.2  # 仓位调整系数（20%）
