@@ -26,13 +26,17 @@ def format_trade_message(side, symbol, price, amount, total, grid_size, retry_co
     direction_emoji = "🟢" if side == 'buy' else "🔴"
     direction_text = "买入" if side == 'buy' else "卖出"
     
+    # 解析交易对获取币种
+    base_currency = symbol.split('/')[0] if '/' in symbol else 'BNB'
+    quote_currency = symbol.split('/')[1] if '/' in symbol else 'USDT'
+    
     # 构建消息主体
     message = f"""
 {direction_emoji} {direction_text} {symbol}
 ━━━━━━━━━━━━━━━━━━━━
-💰 价格：{price:.2f} USDT
-📊 数量：{amount:.4f} BNB
-💵 金额：{total:.2f} USDT
+💰 价格：{price:.2f} {quote_currency}
+📊 数量：{amount:.4f} {base_currency}
+💵 金额：{total:.2f} {quote_currency}
 📈 网格：{grid_size}%
 """
     

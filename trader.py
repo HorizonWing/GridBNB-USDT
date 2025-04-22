@@ -19,6 +19,9 @@ class GridTrader:
         self.exchange = exchange
         self.config = config
         self.symbol = config.SYMBOL
+        # 解析交易对的币种
+        self.base_currency = self.symbol.split('/')[0] if '/' in self.symbol else 'BNB'
+        self.quote_currency = self.symbol.split('/')[1] if '/' in self.symbol else 'USDT'
         self.base_price = config.INITIAL_BASE_PRICE
         self.grid_size = config.INITIAL_GRID
         self.initialized = False
@@ -101,7 +104,7 @@ class GridTrader:
             send_pushplus_message(
                 f"网格交易启动成功\n"
                 f"交易对: {self.config.SYMBOL}\n"
-                f"基准价: {self.base_price} USDT\n"
+                f"基准价: {self.base_price} {self.quote_currency}\n"
                 f"网格大小: {self.grid_size}%\n"
                 f"触发阈值: {threshold*100}% (网格大小的1/5)"
             )
@@ -257,8 +260,8 @@ class GridTrader:
                abs(amount - getattr(self, f'{cache_key}_last', 0)) / max(getattr(self, f'{cache_key}_last', 0.01), 0.01) > 0.01:
                 self.logger.info(
                     f"目标订单金额计算 | "
-                    f"总资产: {total_assets:.2f} USDT | "
-                    f"计算金额 (10%): {amount:.2f} USDT"
+                    f"总资产: {total_assets:.2f} {self.quote_currency} | "
+                    f"计算金额 (10%): {amount:.2f} {self.quote_currency}"
                 )
                 setattr(self, f'{cache_key}_last', amount)
             
@@ -361,24 +364,24 @@ class GridTrader:
             current_price = self.current_price
             
             # 计算所需资金
-            required_usdt = self.config.MIN_TRADE_AMOUNT * 2  # 保持两倍最小交易额
-            required_bnb = required_usdt / current_price
+            required_quote = self.config.MIN_TRADE_AMOUNT * 2  # 保持两倍最小交易额
+            required_base = required_quote / current_price
             
             # 获取现货余额
-            spot_usdt = float(balance['free'].get('USDT', 0))
-            spot_bnb = float(balance['free'].get('BNB', 0))
+            spot_quote = float(balance['free'].get(self.quote_currency, 0))
+            spot_base = float(balance['free'].get(self.base_currency, 0))
             
             # 一次性检查和赎回所需资金
             transfers = []
-            if spot_usdt < required_usdt:
+            if spot_quote < required_quote:
                 transfers.append({
-                    'asset': 'USDT',
-                    'amount': required_usdt - spot_usdt
+                    'asset': self.quote_currency,
+                    'amount': required_quote - spot_quote
                 })
-            if spot_bnb < required_bnb:
+            if spot_base < required_base:
                 transfers.append({
-                    'asset': 'BNB',
-                    'amount': required_bnb - spot_bnb
+                    'asset': self.base_currency,
+                    'amount': required_base - spot_base
                 })
             
             # 如果需要赎回，一次性执行所有赎回操作
@@ -410,7 +413,7 @@ class GridTrader:
     async def _get_position_ratio(self):
         """获取当前仓位占总资产比例"""
         try:
-            usdt_balance = await self.get_available_balance('USDT')
+            usdt_balance = await self.get_available_balance(self.quote_currency)
             position_value = await self.risk_manager._get_position_value()
             total_assets = position_value + usdt_balance
             if total_assets == 0:
@@ -443,8 +446,8 @@ class GridTrader:
                     order_price = order_book['bids'][0][0]  # 买1价卖出
 
                 # 计算交易数量
-                amount_usdt = await self._calculate_order_amount(side)
-                amount = self._adjust_amount_precision(amount_usdt / order_price)
+                amount_quote = await self._calculate_order_amount(side)
+                amount = self._adjust_amount_precision(amount_quote / order_price)
                 
                 # 检查余额是否足够
                 if side == 'buy':
@@ -459,8 +462,8 @@ class GridTrader:
                 self.logger.info(
                     f"尝试第 {retry_count + 1}/{max_retries} 次 {side} 单 | "
                     f"价格: {order_price} | "
-                    f"金额: {amount_usdt:.2f} USDT | "
-                    f"数量: {amount:.8f} BNB"
+                    f"金额: {amount_quote:.2f} {self.quote_currency} | "
+                    f"数量: {amount:.8f} {self.base_currency}"
                 )
                 
                 # 创建订单
@@ -655,11 +658,11 @@ class GridTrader:
             balance = await self.exchange.fetch_balance()
             if side == 'buy':
                 required = amount * price
-                available = float(balance['free'].get('USDT', 0))
+                available = float(balance['free'].get(self.quote_currency, 0))
                 if available >= required:
                     return True
             else:
-                available = float(balance['free'].get('BNB', 0))
+                available = float(balance['free'].get(self.base_currency, 0))
                 if available >= amount:
                     return True
             
@@ -792,8 +795,8 @@ class GridTrader:
                                 self.active_orders[side] = None
                         # 发送成交通知
                         send_pushplus_message(
-                            f"BNB {{'买入' if side == 'buy' else '卖出'}}单成交\\n"
-                            f"价格: {order['price']} USDT"
+                            f"{self.base_currency} {{'买入' if side == 'buy' else '卖出'}}单成交\\n"
+                            f"价格: {order['price']} {self.quote_currency}"
                         )
                     elif order['status'] == 'open':
                         # 取消未成交订单
@@ -880,7 +883,7 @@ class GridTrader:
 
     def _adjust_amount_precision(self, amount):
         """根据交易所精度调整数量"""
-        precision = 3  # BNB的数量精度是3位小数
+        precision = 3  # 基础币种的数量精度通常是3位小数
         
         formatted_amount = f"{amount:.3f}"
         return float(formatted_amount)
@@ -888,7 +891,7 @@ class GridTrader:
     async def calculate_trade_amount(self, side, order_price):
         # 获取必要参数
         balance = await self.exchange.fetch_balance()
-        total_assets = float(balance['total']['USDT']) + float(balance['total'].get('BNB', 0)) * order_price
+        total_assets = float(balance['total'][self.quote_currency]) + float(balance['total'].get(self.base_currency, 0)) * order_price
         
         # 计算波动率调整因子
         volatility = await self._calculate_volatility()
@@ -916,12 +919,12 @@ class GridTrader:
         )
         
         # 应用最小/最大限制
-        amount_usdt = max(
+        amount_quote = max(
             min(risk_adjusted_amount, self.config.BASE_AMOUNT),
             self.config.MIN_TRADE_AMOUNT
         )
         
-        return amount_usdt
+        return amount_quote
 
     async def calculate_win_rate(self):
         """计算胜率"""
@@ -1021,13 +1024,13 @@ class GridTrader:
         """计算需要划转的资金量"""
         current_price = await self._get_latest_price()
         balance = await self.exchange.fetch_balance()
-        total_assets = float(balance['total']['USDT']) + float(balance['total'].get('BNB', 0)) * current_price
+        total_assets = float(balance['total'][self.quote_currency]) + float(balance['total'].get(self.base_currency, 0)) * current_price
         
         # 获取当前订单需要的金额
-        amount_usdt = await self.calculate_trade_amount(side, current_price)
+        amount_quote = await self.calculate_trade_amount(side, current_price)
         
         # 考虑手续费和滑价
-        required = amount_usdt * 1.05  # 增加5%缓冲
+        required = amount_quote * 1.05  # 增加5%缓冲
         return min(required, self.config.MAX_POSITION_RATIO * total_assets)
 
     async def _transfer_excess_funds(self):
@@ -1043,52 +1046,52 @@ class GridTrader:
                 return
 
             # 计算目标保留金额 (总资产的16%)
-            target_usdt_hold = total_assets * 0.16
-            target_bnb_hold_value = total_assets * 0.16
-            target_bnb_hold_amount = target_bnb_hold_value / current_price
+            target_quote_hold = total_assets * 0.16
+            target_base_hold_value = total_assets * 0.16
+            target_base_hold_amount = target_base_hold_value / current_price
 
             # 获取当前现货可用余额
-            spot_usdt_balance = float(balance.get('free', {}).get('USDT', 0))
-            spot_bnb_balance = float(balance.get('free', {}).get('BNB', 0))
+            spot_quote_balance = float(balance.get('free', {}).get(self.quote_currency, 0))
+            spot_base_balance = float(balance.get('free', {}).get(self.base_currency, 0))
 
             self.logger.info(
-                f"资金转移检查 | 总资产: {total_assets:.2f} USDT | "
-                f"目标USDT持有: {target_usdt_hold:.2f} | 现货USDT: {spot_usdt_balance:.2f} | "
-                f"目标BNB持有(等值): {target_bnb_hold_value:.2f} USDT ({target_bnb_hold_amount:.4f} BNB) | "
-                f"现货BNB: {spot_bnb_balance:.4f}"
+                f"资金转移检查 | 总资产: {total_assets:.2f} {self.quote_currency} | "
+                f"目标{self.quote_currency}持有: {target_quote_hold:.2f} | 现货{self.quote_currency}: {spot_quote_balance:.2f} | "
+                f"目标{self.base_currency}持有(等值): {target_base_hold_value:.2f} {self.quote_currency} ({target_base_hold_amount:.4f} {self.base_currency}) | "
+                f"现货{self.base_currency}: {spot_base_balance:.4f}"
             )
 
             transfer_executed = False # 标记是否执行了划转
 
-            # 处理USDT：如果现货超出目标，转移多余部分
-            if spot_usdt_balance > target_usdt_hold:
-                transfer_amount = spot_usdt_balance - target_usdt_hold
+            # 处理报价币种：如果现货超出目标，转移多余部分
+            if spot_quote_balance > target_quote_hold:
+                transfer_amount = spot_quote_balance - target_quote_hold
                 # 增加最小划转金额判断，避免无效操作
                 # 将阈值提高到 1.0 USDT
                 if transfer_amount > 1.0: 
-                    self.logger.info(f"转移多余USDT到理财: {transfer_amount:.2f}")
+                    self.logger.info(f"转移多余{self.quote_currency}到理财: {transfer_amount:.2f}")
                     try:
-                        await self.exchange.transfer_to_savings('USDT', transfer_amount)
+                        await self.exchange.transfer_to_savings(self.quote_currency, transfer_amount)
                         transfer_executed = True
                     except Exception as transfer_e:
-                        self.logger.error(f"转移USDT到理财失败: {str(transfer_e)}")
+                        self.logger.error(f"转移{self.quote_currency}到理财失败: {str(transfer_e)}")
                 else:
-                     self.logger.info(f"USDT超出部分 ({transfer_amount:.2f}) 过小，不执行划转")
+                     self.logger.info(f"{self.quote_currency}超出部分 ({transfer_amount:.2f}) 过小，不执行划转")
 
-            # 处理BNB：如果现货超出目标，转移多余部分
-            if spot_bnb_balance > target_bnb_hold_amount:
-                transfer_amount = spot_bnb_balance - target_bnb_hold_amount
+            # 处理基础币种：如果现货超出目标，转移多余部分
+            if spot_base_balance > target_base_hold_amount:
+                transfer_amount = spot_base_balance - target_base_hold_amount
                 # 检查转移金额是否大于等于 0.01 BNB
                 if transfer_amount >= 0.01:
-                    self.logger.info(f"转移多余BNB到理财: {transfer_amount:.4f}")
+                    self.logger.info(f"转移多余{self.base_currency}到理财: {transfer_amount:.4f}")
                     try:
-                        await self.exchange.transfer_to_savings('BNB', transfer_amount)
+                        await self.exchange.transfer_to_savings(self.base_currency, transfer_amount)
                         transfer_executed = True
                     except Exception as transfer_e:
-                        self.logger.error(f"转移BNB到理财失败: {str(transfer_e)}")
+                        self.logger.error(f"转移{self.base_currency}到理财失败: {str(transfer_e)}")
                 else:
                     # 修改日志消息以反映新的阈值
-                    self.logger.info(f"BNB超出部分 ({transfer_amount:.4f}) 低于最小申购额 0.01 BNB，不执行划转")
+                    self.logger.info(f"{self.base_currency}超出部分 ({transfer_amount:.4f}) 低于最小申购额 0.01 {self.base_currency}，不执行划转")
 
             if transfer_executed:
                 self.logger.info("多余资金已尝试转移到理财账户")
@@ -1128,9 +1131,9 @@ class GridTrader:
             max_single_transfer = 5000  # 假设单次最大划转5000 USDT
             while required_with_buffer > 0:
                 transfer_amount = min(required_with_buffer, max_single_transfer)
-                await self.exchange.transfer_to_spot('USDT', transfer_amount)
+                await self.exchange.transfer_to_spot(self.quote_currency, transfer_amount)
                 required_with_buffer -= transfer_amount
-                self.logger.info(f"预划转完成: {transfer_amount} USDT | 剩余需划转: {required_with_buffer}")
+                self.logger.info(f"预划转完成: {transfer_amount} {self.quote_currency} | 剩余需划转: {required_with_buffer}")
                 
             self.logger.info("资金预划转完成，等待10秒确保到账")
             await asyncio.sleep(10)  # 等待资金到账
@@ -1170,78 +1173,78 @@ class GridTrader:
             current_price = await self._get_latest_price()
             
             # 计算目标持仓（总资产的16%）
-            target_usdt = total_assets * 0.16
-            target_bnb = (total_assets * 0.16) / current_price
+            target_quote = total_assets * 0.16
+            target_base = (total_assets * 0.16) / current_price
             
             # 获取现货余额
-            usdt_balance = float(balance['free'].get('USDT', 0))
-            bnb_balance = float(balance['free'].get('BNB', 0))
+            quote_balance = float(balance['free'].get(self.quote_currency, 0))
+            base_balance = float(balance['free'].get(self.base_currency, 0))
             
             # 计算总余额（现货+理财）
-            total_usdt = usdt_balance + float(funding_balance.get('USDT', 0))
-            total_bnb = bnb_balance + float(funding_balance.get('BNB', 0))
+            total_quote = quote_balance + float(funding_balance.get(self.quote_currency, 0))
+            total_base = base_balance + float(funding_balance.get(self.base_currency, 0))
             
-            # 调整USDT余额
-            if usdt_balance > target_usdt:
+            # 调整报价币余额
+            if quote_balance > target_quote:
                 # 多余的申购到理财
-                transfer_amount = usdt_balance - target_usdt
-                self.logger.info(f"发现可划转USDT: {transfer_amount}")
+                transfer_amount = quote_balance - target_quote
+                self.logger.info(f"发现可划转{self.quote_currency}: {transfer_amount}")
                 # --- 添加最小申购金额检查 (>= 1 USDT) ---
                 if transfer_amount >= 1.0:
                     try:
-                        await self.exchange.transfer_to_savings('USDT', transfer_amount)
-                        self.logger.info(f"已将 {transfer_amount:.2f} USDT 申购到理财")
-                    except Exception as e_savings_usdt:
-                         self.logger.error(f"申购USDT到理财失败: {str(e_savings_usdt)}")
+                        await self.exchange.transfer_to_savings(self.quote_currency, transfer_amount)
+                        self.logger.info(f"已将 {transfer_amount:.2f} {self.quote_currency} 申购到理财")
+                    except Exception as e_savings_quote:
+                         self.logger.error(f"申购{self.quote_currency}到理财失败: {str(e_savings_quote)}")
                 else:
-                     self.logger.info(f"可划转USDT ({transfer_amount:.2f}) 低于最小申购额 1.0 USDT，跳过申购")
-            elif usdt_balance < target_usdt:
+                     self.logger.info(f"可划转{self.quote_currency} ({transfer_amount:.2f}) 低于最小申购额 1.0 {self.quote_currency}，跳过申购")
+            elif quote_balance < target_quote:
                 # 不足的从理财赎回
-                transfer_amount = target_usdt - usdt_balance
-                self.logger.info(f"从理财赎回USDT: {transfer_amount}")
+                transfer_amount = target_quote - quote_balance
+                self.logger.info(f"从理财赎回{self.quote_currency}: {transfer_amount}")
                 # 同样，赎回USDT也可能需要最小金额检查，如果遇到错误需添加
                 try:
-                    await self.exchange.transfer_to_spot('USDT', transfer_amount)
-                    self.logger.info(f"已从理财赎回 {transfer_amount:.2f} USDT")
-                except Exception as e_spot_usdt:
-                    self.logger.error(f"从理财赎回USDT失败: {str(e_spot_usdt)}")
+                    await self.exchange.transfer_to_spot(self.quote_currency, transfer_amount)
+                    self.logger.info(f"已从理财赎回 {transfer_amount:.2f} {self.quote_currency}")
+                except Exception as e_spot_quote:
+                    self.logger.error(f"从理财赎回{self.quote_currency}失败: {str(e_spot_quote)}")
             
-            # 调整BNB余额
-            if bnb_balance > target_bnb:
+            # 调整基础币余额
+            if base_balance > target_base:
                 # 多余的申购到理财
-                transfer_amount = bnb_balance - target_bnb
-                self.logger.info(f"发现可划转BNB: {transfer_amount}")
+                transfer_amount = base_balance - target_base
+                self.logger.info(f"发现可划转{self.base_currency}: {transfer_amount}")
                 # --- 添加最小申购金额检查 ---
                 if transfer_amount >= 0.01:
                     try:
-                        await self.exchange.transfer_to_savings('BNB', transfer_amount)
-                        self.logger.info(f"已将 {transfer_amount:.4f} BNB 申购到理财")
+                        await self.exchange.transfer_to_savings(self.base_currency, transfer_amount)
+                        self.logger.info(f"已将 {transfer_amount:.4f} {self.base_currency} 申购到理财")
                     except Exception as e_savings:
-                        self.logger.error(f"申购BNB到理财失败: {str(e_savings)}")
+                        self.logger.error(f"申购{self.base_currency}到理财失败: {str(e_savings)}")
                 else:
-                    self.logger.info(f"可划转BNB ({transfer_amount:.4f}) 低于最小申购额 0.01 BNB，跳过申购")
-            elif bnb_balance < target_bnb:
+                    self.logger.info(f"可划转{self.base_currency} ({transfer_amount:.4f}) 低于最小申购额 0.01 {self.base_currency}，跳过申购")
+            elif base_balance < target_base:
                 # 不足的从理财赎回
-                transfer_amount = target_bnb - bnb_balance
-                self.logger.info(f"从理财赎回BNB: {transfer_amount}")
+                transfer_amount = target_base - base_balance
+                self.logger.info(f"从理财赎回{self.base_currency}: {transfer_amount}")
                 # 赎回操作通常有不同的最低限额，或者限额较低，这里暂时不加检查
                 # 如果赎回也遇到 -6005，需要在这里也加上对应的赎回最小额检查
                 try:
-                    await self.exchange.transfer_to_spot('BNB', transfer_amount)
-                    self.logger.info(f"已从理财赎回 {transfer_amount:.4f} BNB")
+                    await self.exchange.transfer_to_spot(self.base_currency, transfer_amount)
+                    self.logger.info(f"已从理财赎回 {transfer_amount:.4f} {self.base_currency}")
                 except Exception as e_spot:
-                     self.logger.error(f"从理财赎回BNB失败: {str(e_spot)}")
+                     self.logger.error(f"从理财赎回{self.base_currency}失败: {str(e_spot)}")
             
             self.logger.info(
                 f"资金分配完成\n"
-                f"USDT: {total_usdt:.2f}\n"
-                f"BNB: {total_bnb:.4f}"
+                f"{self.quote_currency}: {total_quote:.2f}\n"
+                f"{self.base_currency}: {total_base:.4f}"
             )
         except Exception as e:
             self.logger.error(f"初始资金检查失败: {str(e)}")
 
     async def _get_total_assets(self):
-        """获取总资产价值（USDT）"""
+        """获取总资产价值（按报价币种计算）"""
         try:
             # 使用缓存避免频繁请求
             current_time = time.time()
@@ -1267,23 +1270,23 @@ class GridTrader:
                 return default_total
             
             # 分别获取现货和理财账户余额（使用安全的get方法）
-            spot_bnb = float(balance.get('free', {}).get('BNB', 0) or 0)
-            spot_usdt = float(balance.get('free', {}).get('USDT', 0) or 0)
+            spot_base = float(balance.get('free', {}).get(self.base_currency, 0) or 0)
+            spot_quote = float(balance.get('free', {}).get(self.quote_currency, 0) or 0)
             
             # 加上已冻结的余额
-            spot_bnb += float(balance.get('used', {}).get('BNB', 0) or 0)
-            spot_usdt += float(balance.get('used', {}).get('USDT', 0) or 0)
+            spot_base += float(balance.get('used', {}).get(self.base_currency, 0) or 0)
+            spot_quote += float(balance.get('used', {}).get(self.quote_currency, 0) or 0)
             
             # 加上理财账户余额
-            fund_bnb = 0
-            fund_usdt = 0
+            fund_base = 0
+            fund_quote = 0
             if funding_balance:
-                fund_bnb = float(funding_balance.get('BNB', 0) or 0)
-                fund_usdt = float(funding_balance.get('USDT', 0) or 0)
+                fund_base = float(funding_balance.get(self.base_currency, 0) or 0)
+                fund_quote = float(funding_balance.get(self.quote_currency, 0) or 0)
             
             # 分别计算现货和理财账户总值
-            spot_value = spot_usdt + (spot_bnb * current_price)
-            fund_value = fund_usdt + (fund_bnb * current_price)
+            spot_value = spot_quote + (spot_base * current_price)
+            fund_value = fund_quote + (fund_base * current_price)
             total_assets = spot_value + fund_value
             
             # 更新缓存
@@ -1296,11 +1299,11 @@ class GridTrader:
             if not hasattr(self, '_last_logged_assets') or \
                abs(total_assets - self._last_logged_assets) / max(self._last_logged_assets, 0.01) > 0.01:
                 self.logger.info(
-                    f"总资产: {total_assets:.2f} USDT | "
-                    f"现货: {spot_value:.2f} USDT "
-                    f"(BNB: {spot_bnb:.4f}, USDT: {spot_usdt:.2f}) | "
-                    f"理财: {fund_value:.2f} USDT "
-                    f"(BNB: {fund_bnb:.4f}, USDT: {fund_usdt:.2f})"
+                    f"总资产: {total_assets:.2f} {self.quote_currency} | "
+                    f"现货: {spot_value:.2f} {self.quote_currency} "
+                    f"({self.base_currency}: {spot_base:.4f}, {self.quote_currency}: {spot_quote:.2f}) | "
+                    f"理财: {fund_value:.2f} {self.quote_currency} "
+                    f"({self.base_currency}: {fund_base:.4f}, {self.quote_currency}: {fund_quote:.2f})"
                 )
                 self._last_logged_assets = total_assets
             
@@ -1317,12 +1320,12 @@ class GridTrader:
             funding_balance = await self.exchange.fetch_funding_balance()
             
             # 计算总资产
-            bnb_balance = float(balance['total'].get('BNB', 0))
-            usdt_balance = float(balance['total'].get('USDT', 0))
+            base_balance = float(balance['total'].get(self.base_currency, 0))
+            quote_balance = float(balance['total'].get(self.quote_currency, 0))
             current_price = await self._get_latest_price()
             
-            self.total_assets = usdt_balance + (bnb_balance * current_price)
-            self.logger.info(f"更新总资产: {self.total_assets:.2f} USDT")
+            self.total_assets = quote_balance + (base_balance * current_price)
+            self.logger.info(f"更新总资产: {self.total_assets:.2f} {self.quote_currency}")
             
         except Exception as e:
             self.logger.error(f"更新总资产失败: {str(e)}")
@@ -1446,7 +1449,7 @@ class GridTrader:
         """检查买入前的余额，如果不够则从理财赎回"""
         try:
             # 计算所需买入资金
-            amount_usdt = await self._calculate_order_amount('buy')
+            amount_quote = await self._calculate_order_amount('buy')
             
             # 获取现货余额
             spot_balance = await self.exchange.fetch_balance({'type': 'spot'})
@@ -1456,35 +1459,35 @@ class GridTrader:
                 self.logger.error("获取现货余额失败，返回无效数据")
                 return False
                 
-            spot_usdt = float(spot_balance.get('free', {}).get('USDT', 0) or 0)
+            spot_quote = float(spot_balance.get('free', {}).get(self.quote_currency, 0) or 0)
             
-            self.logger.info(f"买入前余额检查 | 所需USDT: {amount_usdt:.2f} | 现货USDT: {spot_usdt:.2f}")
+            self.logger.info(f"买入前余额检查 | 所需{self.quote_currency}: {amount_quote:.2f} | 现货{self.quote_currency}: {spot_quote:.2f}")
             
             # 如果现货余额足够，直接返回成功
-            if spot_usdt >= amount_usdt:
+            if spot_quote >= amount_quote:
                 return True
                 
             # 现货不足，尝试从理财赎回
-            self.logger.info(f"现货USDT不足，尝试从理财赎回...")
+            self.logger.info(f"现货{self.quote_currency}不足，尝试从理财赎回...")
             funding_balance = await self.exchange.fetch_funding_balance()
-            funding_usdt = float(funding_balance.get('USDT', 0) or 0)
+            funding_quote = float(funding_balance.get(self.quote_currency, 0) or 0)
             
             # 检查总余额是否足够
-            if spot_usdt + funding_usdt < amount_usdt:
+            if spot_quote + funding_quote < amount_quote:
                 # 总资金不足，发送通知
-                error_msg = f"资金不足通知\\n交易类型: 买入\\n所需USDT: {amount_usdt:.2f}\\n" \
-                           f"现货余额: {spot_usdt:.2f}\\n理财余额: {funding_usdt:.2f}\\n" \
-                           f"缺口: {amount_usdt - (spot_usdt + funding_usdt):.2f}"
+                error_msg = f"资金不足通知\\n交易类型: 买入\\n所需{self.quote_currency}: {amount_quote:.2f}\\n" \
+                           f"现货余额: {spot_quote:.2f}\\n理财余额: {funding_quote:.2f}\\n" \
+                           f"缺口: {amount_quote - (spot_quote + funding_quote):.2f}"
                 self.logger.error(f"买入资金不足: 现货+理财总额不足以执行交易")
                 send_pushplus_message(error_msg, "资金不足警告")
                 return False
                 
             # 计算需要赎回的金额（增加5%缓冲）
-            needed_amount = (amount_usdt - spot_usdt) * 1.05
+            needed_amount = (amount_quote - spot_quote) * 1.05
             
             # 从理财赎回
-            self.logger.info(f"从理财赎回 {needed_amount:.2f} USDT")
-            await self.exchange.transfer_to_spot('USDT', needed_amount)
+            self.logger.info(f"从理财赎回 {needed_amount:.2f} {self.quote_currency}")
+            await self.exchange.transfer_to_spot(self.quote_currency, needed_amount)
             
             # 等待资金到账
             await asyncio.sleep(5)
@@ -1497,14 +1500,14 @@ class GridTrader:
                 self.logger.error("赎回后获取现货余额失败，返回无效数据")
                 return False
                 
-            new_usdt = float(new_balance.get('free', {}).get('USDT', 0) or 0)
+            new_quote = float(new_balance.get('free', {}).get(self.quote_currency, 0) or 0)
             
-            self.logger.info(f"赎回后余额检查 | 现货USDT: {new_usdt:.2f}")
+            self.logger.info(f"赎回后余额检查 | 现货{self.quote_currency}: {new_quote:.2f}")
             
-            if new_usdt >= amount_usdt:
+            if new_quote >= amount_quote:
                 return True
             else:
-                error_msg = f"资金赎回后仍不足\\n交易类型: 买入\\n所需USDT: {amount_usdt:.2f}\\n现货余额: {new_usdt:.2f}"
+                error_msg = f"资金赎回后仍不足\\n交易类型: 买入\\n所需{self.quote_currency}: {amount_quote:.2f}\\n现货余额: {new_quote:.2f}"
                 self.logger.error(error_msg)
                 send_pushplus_message(error_msg, "资金不足警告")
                 return False
@@ -1525,45 +1528,45 @@ class GridTrader:
                 self.logger.error("获取现货余额失败，返回无效数据")
                 return False
                 
-            spot_bnb = float(spot_balance.get('free', {}).get('BNB', 0) or 0)
+            spot_base = float(spot_balance.get('free', {}).get(self.base_currency, 0) or 0)
             
             # 计算所需数量
-            amount_usdt = await self._calculate_order_amount('sell')
+            amount_quote = await self._calculate_order_amount('sell')
             
             # 确保当前价格有效
             if not self.current_price or self.current_price <= 0:
-                self.logger.error("当前价格无效，无法计算BNB需求量")
+                self.logger.error(f"当前价格无效，无法计算{self.base_currency}需求量")
                 return False
                 
-            bnb_needed = amount_usdt / self.current_price
+            base_needed = amount_quote / self.current_price
             
-            self.logger.info(f"卖出前余额检查 | 所需BNB: {bnb_needed:.8f} | 现货BNB: {spot_bnb:.8f}")
+            self.logger.info(f"卖出前余额检查 | 所需{self.base_currency}: {base_needed:.8f} | 现货{self.base_currency}: {spot_base:.8f}")
             
             # 如果现货余额足够，直接返回成功
-            if spot_bnb >= bnb_needed:
+            if spot_base >= base_needed:
                 return True
                 
             # 现货不足，尝试从理财赎回
-            self.logger.info(f"现货BNB不足，尝试从理财赎回...")
+            self.logger.info(f"现货{self.base_currency}不足，尝试从理财赎回...")
             funding_balance = await self.exchange.fetch_funding_balance()
-            funding_bnb = float(funding_balance.get('BNB', 0) or 0)
+            funding_base = float(funding_balance.get(self.base_currency, 0) or 0)
             
             # 检查总余额是否足够
-            if spot_bnb + funding_bnb < bnb_needed:
+            if spot_base + funding_base < base_needed:
                 # 总资金不足，发送通知
-                error_msg = f"资金不足通知\\n交易类型: 卖出\\n所需BNB: {bnb_needed:.8f}\\n" \
-                           f"现货余额: {spot_bnb:.8f}\\n理财余额: {funding_bnb:.8f}\\n" \
-                           f"缺口: {bnb_needed - (spot_bnb + funding_bnb):.8f}"
+                error_msg = f"资金不足通知\\n交易类型: 卖出\\n所需{self.base_currency}: {base_needed:.8f}\\n" \
+                           f"现货余额: {spot_base:.8f}\\n理财余额: {funding_base:.8f}\\n" \
+                           f"缺口: {base_needed - (spot_base + funding_base):.8f}"
                 self.logger.error(f"卖出资金不足: 现货+理财总额不足以执行交易")
                 send_pushplus_message(error_msg, "资金不足警告")
                 return False
                 
             # 计算需要赎回的金额（增加5%缓冲）
-            needed_amount = (bnb_needed - spot_bnb) * 1.05
+            needed_amount = (base_needed - spot_base) * 1.05
             
             # 从理财赎回
-            self.logger.info(f"从理财赎回 {needed_amount:.8f} BNB")
-            await self.exchange.transfer_to_spot('BNB', needed_amount)
+            self.logger.info(f"从理财赎回 {needed_amount:.8f} {self.base_currency}")
+            await self.exchange.transfer_to_spot(self.base_currency, needed_amount)
             
             # 等待资金到账
             await asyncio.sleep(5)
@@ -1576,14 +1579,14 @@ class GridTrader:
                 self.logger.error("赎回后获取现货余额失败，返回无效数据")
                 return False
                 
-            new_bnb = float(new_balance.get('free', {}).get('BNB', 0) or 0)
+            new_base = float(new_balance.get('free', {}).get(self.base_currency, 0) or 0)
             
-            self.logger.info(f"赎回后余额检查 | 现货BNB: {new_bnb:.8f}")
+            self.logger.info(f"赎回后余额检查 | 现货{self.base_currency}: {new_base:.8f}")
             
-            if new_bnb >= bnb_needed:
+            if new_base >= base_needed:
                 return True
             else:
-                error_msg = f"资金赎回后仍不足\\n交易类型: 卖出\\n所需BNB: {bnb_needed:.8f}\\n现货余额: {new_bnb:.8f}"
+                error_msg = f"资金赎回后仍不足\\n交易类型: 卖出\\n所需{self.base_currency}: {base_needed:.8f}\\n现货余额: {new_base:.8f}"
                 self.logger.error(error_msg)
                 send_pushplus_message(error_msg, "资金不足警告")
                 return False
