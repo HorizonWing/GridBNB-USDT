@@ -182,7 +182,7 @@ async def handle_log(request):
                                 <span class="status-value" id="usdt-balance">--</span>
                             </div>
                             <div class="flex justify-between">
-                                <span>BNB余额</span>
+                                <span><span id="symbol-base"></span>余额</span>
                                 <span class="status-value" id="bnb-balance">--</span>
                             </div>
                             <div class="flex justify-between">
@@ -310,6 +310,8 @@ async def handle_log(request):
                             data.usdt_balance != null ? data.usdt_balance.toFixed(2) : '--';
                         document.querySelector('#bnb-balance').textContent = 
                             data.bnb_balance != null ? data.bnb_balance.toFixed(4) : '--';
+                        document.querySelector('#symbol-base').textContent = 
+                            data.symbol_base != null ? data.symbol_base : '--';
                         
                         // 更新盈亏信息
                         const totalProfitElement = document.querySelector('#total-profit');
@@ -438,7 +440,9 @@ async def handle_status(request):
             "profit_rate": profit_rate,
             "s1_daily_high": s1_high,
             "s1_daily_low": s1_low,
-            "position_percentage": position_percentage
+            "position_percentage": position_percentage,
+            "symbol_base": SYMBOL_BASE,
+            "symbol_quote": SYMBOL_QUOTE,
         }
         
         return web.json_response(status)
