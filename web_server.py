@@ -359,6 +359,7 @@ async def handle_status(request):
     """处理状态API请求"""
     try:
         trader = request.app['trader']
+        config = request.app['config']
         s1_controller = trader.position_controller_s1 # 获取 S1 控制器实例
 
         # 获取交易所数据
@@ -374,8 +375,11 @@ async def handle_status(request):
         threshold = grid_size_decimal / 5
         
         # 计算总资产
-        bnb_balance = float(balance['total'].get('BNB', 0))
-        usdt_balance = float(balance['total'].get('USDT', 0))
+        SYMBOL = config.SYMBOL if config.SYMBOL else 'BNB/USDT'
+        SYMBOL_BASE = SYMBOL.split('/')[0] if '/' in SYMBOL else 'BNB'
+        SYMBOL_QUOTE = SYMBOL.split('/')[1] if '/' in SYMBOL else 'USDT'
+        bnb_balance = float(balance['total'].get(SYMBOL_BASE, 0))
+        usdt_balance = float(balance['total'].get(SYMBOL_QUOTE, 0))
         total_assets = usdt_balance + (bnb_balance * current_price)
         
         # 计算总盈亏和盈亏率
