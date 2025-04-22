@@ -5,6 +5,7 @@ import aiofiles
 import logging
 from datetime import datetime
 import psutil
+import config
 
 class IPLogger:
     def __init__(self):
@@ -359,7 +360,6 @@ async def handle_status(request):
     """处理状态API请求"""
     try:
         trader = request.app['trader']
-        config = request.app['config']
         s1_controller = trader.position_controller_s1 # 获取 S1 控制器实例
 
         # 获取交易所数据
