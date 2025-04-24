@@ -122,9 +122,20 @@ async def handle_log(request):
                 .signal-buy {{ background-color: rgba(16, 185, 129, 0.1); }}
                 .signal-sell {{ background-color: rgba(239, 68, 68, 0.1); }}
                 .signal-hold {{ background-color: rgba(156, 163, 175, 0.1); }}
-                .confidence-high {{ color: #10b981; }}
-                .confidence-medium {{ color: #f59e0b; }}
-                .confidence-low {{ color: #9ca3af; }}
+                .confidence-high {{ color: #10b981; font-weight: bold; }}
+                .confidence-medium {{ color: #f59e0b; font-weight: bold; }}
+                .confidence-low {{ color: #9ca3af; font-weight: bold; }}
+                
+                /* 信号样式增强 */
+                #trend-signal.trend-up, 
+                #trend-signal.trend-down {{ 
+                    font-size: 1.75rem; 
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                }}
+                .signal-buy.border-l-4, 
+                .signal-sell.border-l-4 {{
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }}
             </style>
         </head>
         <body class="bg-gray-100">
@@ -250,6 +261,24 @@ async def handle_log(request):
                                 <div>
                                     <span class="text-gray-600 text-sm">信号置信度</span>
                                     <div class="font-bold text-lg" id="confidence">--</div>
+                                </div>
+                            </div>
+                            
+                            <!-- 添加趋势周期信息 -->
+                            <div class="mt-4 pt-3 border-t border-gray-200">
+                                <div class="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <span class="text-gray-600 text-sm">长期趋势</span>
+                                        <div class="font-medium" id="long-trend">--</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-600 text-sm">中期趋势</span>
+                                        <div class="font-medium" id="mid-trend">--</div>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-600 text-sm">短期趋势</span>
+                                        <div class="font-medium" id="short-trend">--</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -432,18 +461,73 @@ async def handle_log(request):
                             }}
                             
                             // 设置市场状态
-                            document.querySelector('#market-state').textContent = trend.market_state || '--';
+                            const marketStateElement = document.querySelector('#market-state');
+                            marketStateElement.textContent = trend.market_state || '--';
+                            
+                            // 根据市场状态中的关键词设置颜色
+                            if (trend.market_state) {{
+                                if (trend.market_state.includes('上涨') || 
+                                    trend.market_state.includes('多头') || 
+                                    trend.market_state.includes('反弹')) {{
+                                    marketStateElement.className = 'font-bold text-lg trend-up';
+                                }} else if (trend.market_state.includes('下跌') || 
+                                           trend.market_state.includes('空头') || 
+                                           trend.market_state.includes('回调')) {{
+                                    marketStateElement.className = 'font-bold text-lg trend-down';
+                                }} else {{
+                                    marketStateElement.className = 'font-bold text-lg trend-sideways';
+                                }}
+                            }} else {{
+                                marketStateElement.className = 'font-bold text-lg';
+                            }}
+                            
+                            // 设置长中短期趋势
+                            const longTrendElement = document.querySelector('#long-trend');
+                            const midTrendElement = document.querySelector('#mid-trend');
+                            const shortTrendElement = document.querySelector('#short-trend');
+                            
+                            if (trend.long_trend) {{
+                                longTrendElement.textContent = trend.long_trend;
+                                longTrendElement.className = 'font-medium ' + getTrendClass(trend.long_trend);
+                            }} else {{
+                                longTrendElement.textContent = '--';
+                                longTrendElement.className = 'font-medium';
+                            }}
+                            
+                            if (trend.mid_trend) {{
+                                midTrendElement.textContent = trend.mid_trend;
+                                midTrendElement.className = 'font-medium ' + getTrendClass(trend.mid_trend);
+                            }} else {{
+                                midTrendElement.textContent = '--';
+                                midTrendElement.className = 'font-medium';
+                            }}
+                            
+                            if (trend.short_trend) {{
+                                shortTrendElement.textContent = trend.short_trend;
+                                shortTrendElement.className = 'font-medium ' + getTrendClass(trend.short_trend);
+                            }} else {{
+                                shortTrendElement.textContent = '--';
+                                shortTrendElement.className = 'font-medium';
+                            }}
                             
                             // 设置建议操作和样式
                             const adviceElement = document.querySelector('#advice');
                             adviceElement.textContent = trend.advice || '--';
                             
-                            if (trend.advice && trend.advice.includes('买入')) {{
-                                adviceElement.className = 'font-bold text-lg confidence-high';
-                            }} else if (trend.advice && trend.advice.includes('卖出')) {{
-                                adviceElement.className = 'font-bold text-lg trend-down';
+                            if (trend.advice) {{
+                                if (trend.advice.includes('强烈建议买入')) {{
+                                    adviceElement.className = 'font-bold text-lg trend-up';
+                                }} else if (trend.advice.includes('小仓位买入')) {{
+                                    adviceElement.className = 'font-bold text-lg text-green-400';
+                                }} else if (trend.advice.includes('强烈建议卖出')) {{
+                                    adviceElement.className = 'font-bold text-lg trend-down';
+                                }} else if (trend.advice.includes('小仓位卖出')) {{
+                                    adviceElement.className = 'font-bold text-lg text-red-400';
+                                }} else {{
+                                    adviceElement.className = 'font-bold text-lg trend-sideways';
+                                }}
                             }} else {{
-                                adviceElement.className = 'font-bold text-lg confidence-low';
+                                adviceElement.className = 'font-bold text-lg';
                             }}
                             
                             // 设置置信度样式
@@ -467,27 +551,35 @@ async def handle_log(request):
                                 const midTrendClass = getTrendClass(trend.mid_trend);
                                 const shortTrendClass = getTrendClass(trend.short_trend);
                                 
-                                // 根据信号类型设置行背景
-                                let rowClass = '';
+                                // 根据信号类型设置行背景样式类
+                                let signalClass = '';
                                 if (trend.signal === '买入') {{
-                                    rowClass = 'signal-buy';
+                                    signalClass = 'signal-buy';
                                 }} else if (trend.signal === '卖出') {{
-                                    rowClass = 'signal-sell';
+                                    signalClass = 'signal-sell';
                                 }} else {{
-                                    rowClass = 'signal-hold';
+                                    signalClass = 'signal-hold';
+                                }}
+                                
+                                // 增加重要信号的高亮度
+                                let rowStyle = '';
+                                if ((trend.signal === '买入' || trend.signal === '卖出') && 
+                                    trend.confidence === '高') {{
+                                    rowStyle = 'border-l-4 ' + (trend.signal === '买入' ? 
+                                        'border-green-500 font-medium' : 'border-red-500 font-medium');
                                 }}
                                 
                                 // 获取置信度样式
                                 const confidenceClass = getConfidenceClass(trend.confidence);
                                 
                                 return ` 
-                                <tr class="border-b ${rowClass}">
+                                <tr class="border-b ${{signalClass}} ${{rowStyle}}">
                                     <td class="px-3 py-2">${{trend.timestamp || '--'}}</td>
-                                    <td class="px-3 py-2 ${getTrendClass(trend.signal)}">${{trend.signal || '--'}}</td>
-                                    <td class="px-3 py-2 ${longTrendClass}">${{trend.long_trend || '--'}}</td>
-                                    <td class="px-3 py-2 ${midTrendClass}">${{trend.mid_trend || '--'}}</td>
-                                    <td class="px-3 py-2 ${shortTrendClass}">${{trend.short_trend || '--'}}</td>
-                                    <td class="px-3 py-2 ${confidenceClass}">${{trend.advice || '--'}}</td>
+                                    <td class="px-3 py-2 ${{getTrendClass(trend.signal)}}">${{trend.signal || '--'}}</td>
+                                    <td class="px-3 py-2 ${{longTrendClass}}">${{trend.long_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${{midTrendClass}}">${{trend.mid_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${{shortTrendClass}}">${{trend.short_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${{confidenceClass}}">${{trend.advice || '--'}}</td>
                                     <td class="px-3 py-2">${{trend.market_state || '--'}}</td>
                                 </tr>
                             `; }}).join('');
