@@ -118,13 +118,13 @@ async def handle_log(request):
                 /* 趋势颜色样式 */
                 .trend-up {{ color: #10b981; font-weight: bold; }}
                 .trend-down {{ color: #ef4444; font-weight: bold; }}
-                .trend-sideways {{ color: #9ca3af; font-weight: bold; }}
+                .trend-sideways {{ color: #6b7280; font-weight: bold; }}
                 .signal-buy {{ background-color: rgba(16, 185, 129, 0.1); }}
                 .signal-sell {{ background-color: rgba(239, 68, 68, 0.1); }}
-                .signal-hold {{ background-color: rgba(156, 163, 175, 0.1); }}
+                .signal-hold {{ background-color: rgba(107, 114, 128, 0.15); }}
                 .confidence-high {{ color: #10b981; font-weight: bold; }}
                 .confidence-medium {{ color: #f59e0b; font-weight: bold; }}
-                .confidence-low {{ color: #9ca3af; font-weight: bold; }}
+                .confidence-low {{ color: #6b7280; font-weight: bold; }}
                 
                 /* 信号样式增强 */
                 #trend-signal.trend-up, 
@@ -135,6 +135,16 @@ async def handle_log(request):
                 .signal-buy.border-l-4, 
                 .signal-sell.border-l-4 {{
                     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }}
+                
+                /* 表格样式增强 */
+                #trend-history tr:hover {{
+                    background-color: rgba(243, 244, 246, 0.7);
+                }}
+                #trend-history td {{
+                    padding-top: 8px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid #e5e7eb;
                 }}
             </style>
         </head>
@@ -456,8 +466,11 @@ async def handle_log(request):
                                 cardElement.classList.add('border');
                                 cardElement.classList.add('border-red-200');
                             }} else {{
+                                // 持有信号样式增强
                                 signalElement.classList.add('trend-sideways');
-                                cardElement.classList.add('bg-gray-50');
+                                cardElement.classList.add('bg-gray-100'); // 背景颜色加深
+                                cardElement.classList.add('border');
+                                cardElement.classList.add('border-gray-300'); // 添加边框
                             }}
                             
                             // 设置市场状态
@@ -524,7 +537,9 @@ async def handle_log(request):
                                 }} else if (trend.advice.includes('小仓位卖出')) {{
                                     adviceElement.className = 'font-bold text-lg text-red-400';
                                 }} else {{
-                                    adviceElement.className = 'font-bold text-lg trend-sideways';
+                                    // 建议观望样式增强
+                                    adviceElement.className = 'font-bold text-lg text-gray-600';
+                                    adviceElement.style.textDecoration = 'underline';
                                 }}
                             }} else {{
                                 adviceElement.className = 'font-bold text-lg';
@@ -567,6 +582,9 @@ async def handle_log(request):
                                     trend.confidence === '高') {{
                                     rowStyle = 'border-l-4 ' + (trend.signal === '买入' ? 
                                         'border-green-500 font-medium' : 'border-red-500 font-medium');
+                                }} else if (trend.signal === '持有') {{
+                                    // 为持有信号添加灰色边框
+                                    rowStyle = 'border-l-4 border-gray-400 font-medium';
                                 }}
                                 
                                 // 获取置信度样式
@@ -590,6 +608,8 @@ async def handle_log(request):
                             if (!trend) return '';
                             if (trend.includes('上升') || trend === '买入') return 'trend-up';
                             if (trend.includes('下降') || trend === '卖出') return 'trend-down';
+                            // 盘整状态加强
+                            if (trend.includes('盘整')) return 'font-semibold text-gray-700 underline';
                             return 'trend-sideways';
                         }}
                         
