@@ -40,6 +40,7 @@ async def main():
         if config.ENABLE_TREND_ANALYZER:
             trend_analyzer_task = asyncio.create_task(start_trend_analyzer(symbol=config.SYMBOL,
                                                                        simulation_mode=False,
+                                                                       output_dir="data",
                                                                        interval=config.TREND_INTERVAL))
         else:
             logging.info("趋势分析未启用")
