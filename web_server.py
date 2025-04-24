@@ -610,8 +610,8 @@ async def get_trend_analysis_data(symbol='BTC/USDT', limit=10):
     try:
         # 准备文件路径
         symbol_safe = symbol.replace('/', '_')
-        signal_file = f"trend_signals/{symbol_safe}_signal.json"
-        history_file = f"trend_signals/{symbol_safe}_signal_history.json"
+        signal_file = f"{config.TREND_OUTPUT_DIR}/{symbol_safe}_signal.json"
+        history_file = f"{config.TREND_OUTPUT_DIR}/{symbol_safe}_signal_history.json"
         
         # 获取最新信号
         latest_signal = None
