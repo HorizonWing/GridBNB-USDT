@@ -8,6 +8,7 @@ from helpers import LogConfig, send_pushplus_message
 from web_server import start_web_server
 from exchange_client import ExchangeClient
 from config import TradingConfig
+from trend_analyzer import start_trend_analyzer
 
 # 在Windows平台上设置SelectorEventLoop
 if platform.system() == 'Windows':
@@ -34,6 +35,14 @@ async def main():
         
         # 初始化交易器
         await trader.initialize()
+
+        # 启动趋势分析
+        if config.ENABLE_TREND_ANALYZER:
+            trend_analyzer_task = asyncio.create_task(start_trend_analyzer(symbol=config.SYMBOL,
+                                                                       simulation_mode=False,
+                                                                       interval=config.TREND_INTERVAL))
+        else:
+            logging.info("趋势分析未启用")
         
         # 启动Web服务器
         web_server_task = asyncio.create_task(start_web_server(trader))
@@ -42,7 +51,10 @@ async def main():
         trading_task = asyncio.create_task(trader.main_loop())
         
         # 等待所有任务完成
-        await asyncio.gather(web_server_task, trading_task)
+        if config.ENABLE_TREND_ANALYZER:
+            await asyncio.gather(web_server_task, trading_task, trend_analyzer_task)
+        else:
+            await asyncio.gather(web_server_task, trading_task)
         
     except Exception as e:
         error_msg = f"启动失败: {str(e)}\n{traceback.format_exc()}"

@@ -285,17 +285,21 @@ class TrendAnalyzer:
         self.is_running = False
         self.logger.info("正在停止持续分析...")
 
-async def main():
-    """主函数"""
+async def start_trend_analyzer(symbol: str = 'BTC/USDT',
+                              output_dir: str = 'trend_signals',
+                              simulation_mode: bool = True,
+                              proxy: str = None,
+                              interval: int = 60,
+                              continuous: bool = True):
     # 设置命令行参数
     parser = argparse.ArgumentParser(description='趋势分析与交易信号整合系统')
     parser.add_argument('--exchange', type=str, default='binance', help='交易所ID (默认: binance)')
-    parser.add_argument('--symbol', type=str, default='BTC/USDT', help='交易对 (默认: BTC/USDT)')
-    parser.add_argument('--output', type=str, default='trend_signals', help='输出目录 (默认: trend_signals)')
-    parser.add_argument('--simulation', action='store_true', help='使用模拟数据模式')
-    parser.add_argument('--proxy', type=str, help='HTTP/HTTPS代理地址 (例如: http://127.0.0.1:7890)')
-    parser.add_argument('--continuous', action='store_true', help='启用持续监控模式')
-    parser.add_argument('--interval', type=int, default=300, help='持续监控模式下的检测间隔(秒) (默认: 300)')
+    parser.add_argument('--symbol', type=str, default=symbol, help='交易对 (默认: BTC/USDT)')
+    parser.add_argument('--output', type=str, default=output_dir, help='输出目录 (默认: trend_signals)')
+    parser.add_argument('--simulation', action='store_true', default=simulation_mode, help='使用模拟数据模式')
+    parser.add_argument('--proxy', type=str, default=proxy, help='HTTP/HTTPS代理地址 (例如: http://127.0.0.1:7890)')
+    parser.add_argument('--continuous', action='store_true', default=continuous, help='启用持续监控模式')
+    parser.add_argument('--interval', type=int, default=interval, help='持续监控模式下的检测间隔(秒) (默认: 60)')
     args = parser.parse_args()
     
     # 创建趋势主系统实例
@@ -326,6 +330,9 @@ async def main():
         # 确保正确关闭
         if args.continuous and trend_analyzer.is_running:
             await trend_analyzer.stop()
+
+async def main():
+    await start_trend_analyzer()
 
 if __name__ == "__main__":
     # Windows平台事件循环兼容

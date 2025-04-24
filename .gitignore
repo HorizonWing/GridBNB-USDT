@@ -122,3 +122,10 @@ data/
 results/
 trend_signals/
 trend_results/
+
+# 忽略所有日志文件
+*.log
+*.log.*
+*.log.*.*
+*.log.*.*.*
+*.log.*.*.*.*
