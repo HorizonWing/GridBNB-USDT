@@ -23,7 +23,7 @@ DEBUG_MODE = False  # 设置为True时显示详细日志
 API_TIMEOUT = 10000  # API超时时间（毫秒）
 RECV_WINDOW = 5000  # 接收窗口时间（毫秒）
 RISK_CHECK_INTERVAL = 300  # 5分钟检查一次风控
-TREND_INTERVAL = 60  # 趋势分析间隔（秒）
+TREND_INTERVAL = os.getenv('TREND_INTERVAL', 60)  # 趋势分析间隔（秒）
 ENABLE_TREND_ANALYZER = True  # 是否启用趋势分析
 TREND_OUTPUT_DIR = "data"  # 趋势分析输出目录
 try:
