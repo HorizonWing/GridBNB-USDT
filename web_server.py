@@ -1,11 +1,12 @@
-from aiohttp import web
 import os
-from helpers import LogConfig
-import aiofiles
+import json
+from aiohttp import web
 import logging
 from datetime import datetime
 import psutil
 import config
+import aiofiles
+from helpers import LogConfig
 
 class IPLogger:
     def __init__(self):
@@ -215,6 +216,59 @@ async def handle_log(request):
                     </div>
                 </div>
 
+                <!-- 趋势分析结果 -->
+                <div class="card mb-8">
+                    <h2 class="text-lg font-semibold mb-4">趋势分析结果</h2>
+                    
+                    <!-- 最新趋势信号 -->
+                    <div class="mb-6">
+                        <h3 class="text-md font-medium mb-3">当前趋势信号</h3>
+                        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                                <div>
+                                    <span class="text-gray-600 text-sm">信号类型</span>
+                                    <div class="font-bold text-lg" id="trend-signal">--</div>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600 text-sm">市场状态</span>
+                                    <div class="font-bold text-lg" id="market-state">--</div>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600 text-sm">建议操作</span>
+                                    <div class="font-bold text-lg" id="advice">--</div>
+                                </div>
+                                <div>
+                                    <span class="text-gray-600 text-sm">信号置信度</span>
+                                    <div class="font-bold text-lg" id="confidence">--</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 趋势历史记录 -->
+                    <div>
+                        <h3 class="text-md font-medium mb-3">趋势历史记录</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-3 py-2 text-left">时间</th>
+                                        <th class="px-3 py-2 text-left">信号</th>
+                                        <th class="px-3 py-2 text-left">长期趋势</th>
+                                        <th class="px-3 py-2 text-left">中期趋势</th>
+                                        <th class="px-3 py-2 text-left">短期趋势</th>
+                                        <th class="px-3 py-2 text-left">建议</th>
+                                        <th class="px-3 py-2 text-left">市场状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trend-history">
+                                    <!-- 趋势历史记录将通过JavaScript动态插入 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 最近交易记录 -->
                 <div class="card mt-4 mb-8">
                     <h2 class="text-lg font-semibold mb-4">最近交易</h2>
@@ -339,6 +393,30 @@ async def handle_log(request):
                         document.querySelector('#target-order-amount').textContent = 
                             data.target_order_amount ? data.target_order_amount.toFixed(2) + ' USDT' : '--';
                         
+                        // 更新趋势信号
+                        if (data.trend_data && data.trend_data.latest) {{
+                            const trend = data.trend_data.latest;
+                            document.querySelector('#trend-signal').textContent = trend.signal || '--';
+                            document.querySelector('#market-state').textContent = trend.market_state || '--';
+                            document.querySelector('#advice').textContent = trend.advice || '--';
+                            document.querySelector('#confidence').textContent = trend.confidence || '--';
+                        }}
+                        
+                        // 更新趋势历史记录
+                        if (data.trend_data && data.trend_data.history && data.trend_data.history.length > 0) {{
+                            document.querySelector('#trend-history').innerHTML = data.trend_data.history.map(function(trend) {{ return ` 
+                                <tr class="border-b">
+                                    <td class="px-3 py-2">${{trend.timestamp || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.signal || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.long_trend || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.mid_trend || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.short_trend || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.advice || '--'}}</td>
+                                    <td class="px-3 py-2">${{trend.market_state || '--'}}</td>
+                                </tr>
+                            `; }}).join('');
+                        }}
+                        
                         console.log('状态更新成功:', data);
                     }} catch (error) {{
                         console.error('更新状态失败:', error);
@@ -422,6 +500,9 @@ async def handle_status(request):
         s1_high = s1_controller.s1_daily_high if s1_controller else None
         s1_low = s1_controller.s1_daily_low if s1_controller else None
         
+        # 获取趋势分析数据
+        trend_data = await get_trend_analysis_data(symbol=SYMBOL, limit=10)
+
         # 构建响应数据
         status = {
             "base_price": trader.base_price,
@@ -443,11 +524,23 @@ async def handle_status(request):
             "position_percentage": position_percentage,
             "symbol_base": SYMBOL_BASE,
             "symbol_quote": SYMBOL_QUOTE,
+            "trend_data": trend_data  # 添加趋势分析数据
         }
         
         return web.json_response(status)
     except Exception as e:
         logging.error(f"获取状态数据失败: {str(e)}", exc_info=True)
+        return web.json_response({"error": str(e)}, status=500)
+
+async def handle_trend_analysis(request):
+    """处理趋势分析API请求"""
+    try:
+        symbol = request.query.get('symbol', config.SYMBOL)
+        limit = int(request.query.get('limit', 10))
+        trend_data = await get_trend_analysis_data(symbol=symbol, limit=limit)
+        return web.json_response(trend_data)
+    except Exception as e:
+        logging.error(f"获取趋势分析数据失败: {str(e)}", exc_info=True)
         return web.json_response({"error": str(e)}, status=500)
 
 async def start_web_server(trader):
@@ -480,6 +573,7 @@ async def start_web_server(trader):
     app.router.add_get('/', handle_log)
     app.router.add_get('/api/logs', handle_log_content)
     app.router.add_get('/api/status', handle_status)
+    app.router.add_get('/api/trend', handle_trend_analysis)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 58181)
@@ -500,4 +594,43 @@ async def handle_log_content(request):
             
         return web.Response(text=content)
     except Exception as e:
-        return web.Response(text="", status=500) 
+        return web.Response(text="", status=500)
+
+# 添加趋势分析结果读取函数
+async def get_trend_analysis_data(symbol='BTC/USDT', limit=10):
+    """读取趋势分析数据
+    
+    Args:
+        symbol: 交易对，如 'BTC/USDT'
+        limit: 最多返回的历史记录数量
+        
+    Returns:
+        dict: 包含最新信号和历史信号的字典
+    """
+    try:
+        # 准备文件路径
+        symbol_safe = symbol.replace('/', '_')
+        signal_file = f"trend_signals/{symbol_safe}_signal.json"
+        history_file = f"trend_signals/{symbol_safe}_signal_history.json"
+        
+        # 获取最新信号
+        latest_signal = None
+        if os.path.exists(signal_file):
+            with open(signal_file, 'r', encoding='utf-8') as f:
+                latest_signal = json.load(f)
+        
+        # 获取历史信号
+        history = []
+        if os.path.exists(history_file):
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+                # 只返回指定数量的最新记录
+                history = history[-limit:] if limit > 0 else history
+        
+        return {
+            'latest': latest_signal,
+            'history': history
+        }
+    except Exception as e:
+        logging.error(f"读取趋势分析数据失败: {str(e)}", exc_info=True)
+        return {'latest': None, 'history': []} 

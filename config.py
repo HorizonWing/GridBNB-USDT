@@ -24,7 +24,7 @@ API_TIMEOUT = 10000  # API超时时间（毫秒）
 RECV_WINDOW = 5000  # 接收窗口时间（毫秒）
 RISK_CHECK_INTERVAL = 300  # 5分钟检查一次风控
 TREND_INTERVAL = 60  # 趋势分析间隔（秒）
-ENABLE_TREND_ANALYZER = False  # 是否启用趋势分析
+ENABLE_TREND_ANALYZER = True  # 是否启用趋势分析
 try:
     INITIAL_BASE_PRICE = float(os.getenv('INITIAL_BASE_PRICE', 0))
 except ValueError:

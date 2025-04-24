@@ -129,3 +129,4 @@ trend_results/
 *.log.*.*
 *.log.*.*.*
 *.log.*.*.*.*
+trending_system.log
