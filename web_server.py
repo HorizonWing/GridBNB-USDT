@@ -115,6 +115,16 @@ async def handle_log(request):
                     padding: 1rem;
                     border-radius: 0.5rem;
                 }}
+                /* 趋势颜色样式 */
+                .trend-up {{ color: #10b981; font-weight: bold; }}
+                .trend-down {{ color: #ef4444; font-weight: bold; }}
+                .trend-sideways {{ color: #9ca3af; font-weight: bold; }}
+                .signal-buy {{ background-color: rgba(16, 185, 129, 0.1); }}
+                .signal-sell {{ background-color: rgba(239, 68, 68, 0.1); }}
+                .signal-hold {{ background-color: rgba(156, 163, 175, 0.1); }}
+                .confidence-high {{ color: #10b981; }}
+                .confidence-medium {{ color: #f59e0b; }}
+                .confidence-low {{ color: #9ca3af; }}
             </style>
         </head>
         <body class="bg-gray-100">
@@ -223,7 +233,7 @@ async def handle_log(request):
                     <!-- 最新趋势信号 -->
                     <div class="mb-6">
                         <h3 class="text-md font-medium mb-3">当前趋势信号</h3>
-                        <div class="bg-gray-50 p-4 rounded-lg mb-4">
+                        <div class="bg-gray-50 p-4 rounded-lg mb-4" id="current-signal-card">
                             <div class="grid grid-cols-2 gap-x-4 gap-y-2">
                                 <div>
                                     <span class="text-gray-600 text-sm">信号类型</span>
@@ -396,25 +406,107 @@ async def handle_log(request):
                         // 更新趋势信号
                         if (data.trend_data && data.trend_data.latest) {{
                             const trend = data.trend_data.latest;
-                            document.querySelector('#trend-signal').textContent = trend.signal || '--';
+                            
+                            // 设置信号类型和样式
+                            const signalElement = document.querySelector('#trend-signal');
+                            signalElement.textContent = trend.signal || '--';
+                            signalElement.className = 'font-bold text-lg';
+                            
+                            // 根据信号类型设置卡片背景
+                            const cardElement = document.querySelector('#current-signal-card');
+                            cardElement.className = 'p-4 rounded-lg mb-4';
+                            
+                            if (trend.signal === '买入') {{
+                                signalElement.classList.add('trend-up');
+                                cardElement.classList.add('bg-green-50');
+                                cardElement.classList.add('border');
+                                cardElement.classList.add('border-green-200');
+                            }} else if (trend.signal === '卖出') {{
+                                signalElement.classList.add('trend-down');
+                                cardElement.classList.add('bg-red-50');
+                                cardElement.classList.add('border');
+                                cardElement.classList.add('border-red-200');
+                            }} else {{
+                                signalElement.classList.add('trend-sideways');
+                                cardElement.classList.add('bg-gray-50');
+                            }}
+                            
+                            // 设置市场状态
                             document.querySelector('#market-state').textContent = trend.market_state || '--';
-                            document.querySelector('#advice').textContent = trend.advice || '--';
-                            document.querySelector('#confidence').textContent = trend.confidence || '--';
+                            
+                            // 设置建议操作和样式
+                            const adviceElement = document.querySelector('#advice');
+                            adviceElement.textContent = trend.advice || '--';
+                            
+                            if (trend.advice && trend.advice.includes('买入')) {{
+                                adviceElement.className = 'font-bold text-lg confidence-high';
+                            }} else if (trend.advice && trend.advice.includes('卖出')) {{
+                                adviceElement.className = 'font-bold text-lg trend-down';
+                            }} else {{
+                                adviceElement.className = 'font-bold text-lg confidence-low';
+                            }}
+                            
+                            // 设置置信度样式
+                            const confidenceElement = document.querySelector('#confidence');
+                            confidenceElement.textContent = trend.confidence || '--';
+                            
+                            if (trend.confidence === '高') {{
+                                confidenceElement.className = 'font-bold text-lg confidence-high';
+                            }} else if (trend.confidence === '中') {{
+                                confidenceElement.className = 'font-bold text-lg confidence-medium';
+                            }} else {{
+                                confidenceElement.className = 'font-bold text-lg confidence-low';
+                            }}
                         }}
                         
                         // 更新趋势历史记录
                         if (data.trend_data && data.trend_data.history && data.trend_data.history.length > 0) {{
-                            document.querySelector('#trend-history').innerHTML = data.trend_data.history.map(function(trend) {{ return ` 
-                                <tr class="border-b">
+                            document.querySelector('#trend-history').innerHTML = data.trend_data.history.map(function(trend) {{ 
+                                // 根据趋势方向设置CSS类
+                                const longTrendClass = getTrendClass(trend.long_trend);
+                                const midTrendClass = getTrendClass(trend.mid_trend);
+                                const shortTrendClass = getTrendClass(trend.short_trend);
+                                
+                                // 根据信号类型设置行背景
+                                let rowClass = '';
+                                if (trend.signal === '买入') {{
+                                    rowClass = 'signal-buy';
+                                }} else if (trend.signal === '卖出') {{
+                                    rowClass = 'signal-sell';
+                                }} else {{
+                                    rowClass = 'signal-hold';
+                                }}
+                                
+                                // 获取置信度样式
+                                const confidenceClass = getConfidenceClass(trend.confidence);
+                                
+                                return ` 
+                                <tr class="border-b ${rowClass}">
                                     <td class="px-3 py-2">${{trend.timestamp || '--'}}</td>
-                                    <td class="px-3 py-2">${{trend.signal || '--'}}</td>
-                                    <td class="px-3 py-2">${{trend.long_trend || '--'}}</td>
-                                    <td class="px-3 py-2">${{trend.mid_trend || '--'}}</td>
-                                    <td class="px-3 py-2">${{trend.short_trend || '--'}}</td>
-                                    <td class="px-3 py-2">${{trend.advice || '--'}}</td>
+                                    <td class="px-3 py-2 ${getTrendClass(trend.signal)}">${{trend.signal || '--'}}</td>
+                                    <td class="px-3 py-2 ${longTrendClass}">${{trend.long_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${midTrendClass}">${{trend.mid_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${shortTrendClass}">${{trend.short_trend || '--'}}</td>
+                                    <td class="px-3 py-2 ${confidenceClass}">${{trend.advice || '--'}}</td>
                                     <td class="px-3 py-2">${{trend.market_state || '--'}}</td>
                                 </tr>
                             `; }}).join('');
+                        }}
+                        
+                        // 辅助函数：获取趋势样式类
+                        function getTrendClass(trend) {{
+                            if (!trend) return '';
+                            if (trend.includes('上升') || trend === '买入') return 'trend-up';
+                            if (trend.includes('下降') || trend === '卖出') return 'trend-down';
+                            return 'trend-sideways';
+                        }}
+                        
+                        // 辅助函数：获取置信度样式类
+                        function getConfidenceClass(confidence) {{
+                            if (!confidence) return '';
+                            if (confidence === '高') return 'confidence-high';
+                            if (confidence === '中') return 'confidence-medium';
+                            return 'confidence-low';
                         }}
                         
                         console.log('状态更新成功:', data);
