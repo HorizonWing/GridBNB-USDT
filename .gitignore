@@ -119,3 +119,6 @@ dmypy.json
 data/
 *.log
 *.log.*
+results/
+trend_signals/
+trend_results/
