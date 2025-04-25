@@ -26,6 +26,7 @@ class OrderTracker:
             os.makedirs(self.data_dir)
         self.history_file = os.path.join(self.data_dir, 'trade_history.json')
         self.backup_file = os.path.join(self.data_dir, 'trade_history.backup.json')
+        self.base_price_file = os.path.join(self.data_dir, 'base_price.json')
         self.archive_dir = os.path.join(self.data_dir, 'archives')
         if not os.path.exists(self.archive_dir):
             os.makedirs(self.archive_dir)
@@ -306,3 +307,42 @@ class OrderTracker:
         except Exception as e:
             self.logger.error(f"导出交易记录失败: {str(e)}")
             return False
+
+    def save_base_price(self, base_price, symbol):
+        """保存基准价格到文件
+        
+        Args:
+            base_price (float): 基准价格
+            symbol (str): 交易对符号
+        """
+        try:
+            data = {
+                'base_price': base_price,
+                'symbol': symbol,
+                'timestamp': time.time(),
+                'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
+            with open(self.base_price_file, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            self.logger.info(f"基准价格已保存: {base_price} | 交易对: {symbol}")
+        except Exception as e:
+            self.logger.error(f"保存基准价格失败: {str(e)}")
+    
+    def load_base_price(self):
+        """从文件加载基准价格
+        
+        Returns:
+            float or None: 基准价格，如果文件不存在或加载失败则返回None
+        """
+        try:
+            if os.path.exists(self.base_price_file):
+                with open(self.base_price_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                self.logger.info(f"基准价格已加载: {data['base_price']} | 交易对: {data['symbol']} | 时间: {data['datetime']}")
+                return data['base_price']
+            else:
+                self.logger.info("基准价格文件不存在，将使用配置中的初始值")
+                return None
+        except Exception as e:
+            self.logger.error(f"加载基准价格失败: {str(e)}")
+            return None

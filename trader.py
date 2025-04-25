@@ -86,10 +86,16 @@ class GridTrader:
             
             self.symbol_info = self.exchange.exchange.market(self.config.SYMBOL)
             
-            # 优先使用.env配置的基准价
-            if self.config.INITIAL_BASE_PRICE > 0:
+            # 尝试从文件加载基准价格
+            loaded_base_price = self.order_tracker.load_base_price()
+            if loaded_base_price is not None:
+                self.base_price = loaded_base_price
+                self.logger.info(f"使用已保存的基准价: {self.base_price}")
+            # 如果加载失败，优先使用.env配置的基准价
+            elif self.config.INITIAL_BASE_PRICE > 0:
                 self.base_price = self.config.INITIAL_BASE_PRICE
                 self.logger.info(f"使用预设基准价: {self.base_price}")
+            # 最后使用实时价格
             else:
                 self.base_price = await self._get_latest_price()
                 self.logger.info(f"使用实时基准价: {self.base_price}")
@@ -505,6 +511,9 @@ class GridTrader:
                     }
                     self.order_tracker.add_trade(trade_info)
                     
+                    # 保存基准价格到文件
+                    self.order_tracker.save_base_price(self.base_price, self.config.SYMBOL)
+                    
                     # 更新最后交易时间和价格
                     self.last_trade_time = time.time()
                     self.last_trade_price = float(updated_order['price'])
@@ -562,6 +571,10 @@ class GridTrader:
                                 'order_id': check_order['id']
                             }
                             self.order_tracker.add_trade(trade_info)
+                            
+                            # 保存基准价格到文件
+                            self.order_tracker.save_base_price(self.base_price, self.config.SYMBOL)
+                            
                             self.last_trade_time = time.time()
                             self.last_trade_price = float(check_order['price'])
                             await self._update_total_assets()
