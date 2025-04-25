@@ -425,8 +425,9 @@ async def handle_log(request):
                         profitRateElement.textContent = data.profit_rate ? data.profit_rate.toFixed(2) + '%' : '--';
                         profitRateElement.className = `status-value ${{data.profit_rate >= 0 ? 'profit' : 'loss'}}`;
                         
-                        // 更新交易历史
-                        document.querySelector('#trade-history').innerHTML = data.trade_history.map(function(trade) {{ return ` 
+                        // 更新交易历史 - 倒序显示最新交易记录
+                        const tradeHistoryReversed = [...data.trade_history].reverse();
+                        document.querySelector('#trade-history').innerHTML = tradeHistoryReversed.map(function(trade) {{ return ` 
                             <tr class="border-b">
                                 <td class="py-2">${{trade.timestamp}}</td>
                                 <td class="py-2 ${{trade.side === 'buy' ? 'text-green-500' : 'text-red-500'}}">
@@ -694,6 +695,7 @@ async def handle_status(request):
                 'amount': trade.get('amount', 0),
                 'profit': trade.get('profit', 0)
             } for trade in trades[-10:]]  # 只取最近10笔交易
+            # 注意：保持原始顺序，由前端JavaScript实现倒序显示
         
         # 计算目标委托金额 (总资产的10%)
         target_order_amount = await trader._calculate_order_amount('buy') # buy/sell 结果一样
