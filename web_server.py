@@ -560,7 +560,9 @@ async def handle_log(request):
                         
                         // 更新趋势历史记录
                         if (data.trend_data && data.trend_data.history && data.trend_data.history.length > 0) {{
-                            document.querySelector('#trend-history').innerHTML = data.trend_data.history.map(function(trend) {{ 
+                            // 创建一个副本并反转数组，以便按倒序显示
+                            const historyReversed = [...data.trend_data.history].reverse();
+                            document.querySelector('#trend-history').innerHTML = historyReversed.map(function(trend) {{ 
                                 // 根据趋势方向设置CSS类
                                 const longTrendClass = getTrendClass(trend.long_trend);
                                 const midTrendClass = getTrendClass(trend.mid_trend);
@@ -828,7 +830,7 @@ async def get_trend_analysis_data(symbol='BTC/USDT', limit=10):
         if os.path.exists(history_file):
             with open(history_file, 'r', encoding='utf-8') as f:
                 history = json.load(f)
-                # 只返回指定数量的最新记录
+                # 只返回指定数量的最新记录，但不进行顺序反转，保持文件中的原始顺序
                 history = history[-limit:] if limit > 0 else history
         
         return {
