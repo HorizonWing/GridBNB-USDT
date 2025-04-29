@@ -116,26 +116,26 @@ async def handle_log(request):
                     border-radius: 0.5rem;
                 }}
                 /* 趋势颜色样式 */
-                .trend-up { color: #10b981; font-weight: bold; }
-                .trend-down { color: #ef4444; font-weight: bold; }
-                .trend-sideways { color: #6b7280; font-weight: bold; }
-                .signal-buy { background-color: rgba(16, 185, 129, 0.1); }
-                .signal-sell { background-color: rgba(239, 68, 68, 0.1); }
-                .signal-hold { background-color: rgba(107, 114, 128, 0.15); }
-                .confidence-high { color: #10b981; font-weight: bold; }
-                .confidence-medium { color: #f59e0b; font-weight: bold; }
-                .confidence-low { color: #6b7280; font-weight: bold; }
+                .trend-up {{ color: #10b981; font-weight: bold; }}
+                .trend-down {{ color: #ef4444; font-weight: bold; }}
+                .trend-sideways {{ color: #6b7280; font-weight: bold; }}
+                .signal-buy {{ background-color: rgba(16, 185, 129, 0.1); }}
+                .signal-sell {{ background-color: rgba(239, 68, 68, 0.1); }}
+                .signal-hold {{ background-color: rgba(107, 114, 128, 0.15); }}
+                .confidence-high {{ color: #10b981; font-weight: bold; }}
+                .confidence-medium {{ color: #f59e0b; font-weight: bold; }}
+                .confidence-low {{ color: #6b7280; font-weight: bold; }}
                 
                 /* 信号样式增强 */
                 #trend-signal.trend-up, 
-                #trend-signal.trend-down { 
+                #trend-signal.trend-down {{ 
                     font-size: 1.75rem; 
                     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-                }
+                }}
                 .signal-buy.border-l-4, 
-                .signal-sell.border-l-4 {
+                .signal-sell.border-l-4 {{
                     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }
+                }}
                 
                 /* 表格样式增强 */
                 #trend-history tr:hover {{
