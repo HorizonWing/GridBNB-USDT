@@ -69,7 +69,7 @@ def send_pushplus_message(content, title="交易信号通知"):
         if response.status_code == 200 and response_json.get('code') == 200:
             logging.info(f"消息推送成功: {content}")
         else:
-            logging.error(f"消息推送失败: 状态码={response.status_code}, 响应={response_json}")
+            logging.error(f"消息推送失败: 状态码={response.status_code}, 响应={response_json}, 地址：{url}")
     except Exception as e:
         logging.error(f"消息推送异常: {str(e)}", exc_info=True)
 
