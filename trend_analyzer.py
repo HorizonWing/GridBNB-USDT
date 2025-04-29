@@ -5,6 +5,8 @@ import os
 import platform
 import sys
 import argparse
+from helpers import send_pushplus_message, format_signal_message
+from config import ENABLE_SIGNAL_PUSH
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -66,6 +68,7 @@ class TrendAnalyzer:
         
         # 最近一次分析结果
         self.last_result = None
+        self.last_signal = None  # 添加上一次信号的记录
         self.is_running = False
         
         self.logger.info(f"趋势主系统初始化完成 - 交易对: {symbol}, 模式: {'模拟' if simulation_mode else '实盘'}")
@@ -94,6 +97,27 @@ class TrendAnalyzer:
         
         return logger
     
+    def _should_send_notification(self, current_signal: Dict) -> bool:
+        """
+        判断是否需要发送通知
+        
+        Args:
+            current_signal: 当前信号数据
+            
+        Returns:
+            bool: 如果信号发生变化返回True，否则返回False
+        """
+        if self.last_signal is None:
+            return True
+            
+        # 比较关键信息是否发生变化
+        key_fields = ['signal', 'advice', 'confidence', 'market_state']
+        for field in key_fields:
+            if current_signal.get(field) != self.last_signal.get(field):
+                return True
+                
+        return False
+
     async def run_analysis(self) -> Dict:
         """运行一次趋势分析并返回结果"""
         self.logger.info(f"开始趋势分析 - {self.symbol}")
@@ -104,7 +128,18 @@ class TrendAnalyzer:
             
             # 生成更详细的交易信号
             enhanced_signal = self.enhance_signal(result)
-            
+
+            # 只在信号发生变化时发送通知
+            if ENABLE_SIGNAL_PUSH and self._should_send_notification(enhanced_signal):
+                message = format_signal_message(enhanced_signal)
+                send_pushplus_message(message)
+                self.logger.info("检测到信号变化，已发送通知")
+            else:
+                self.logger.info("信号未发生变化，跳过通知")
+
+            # 更新上一次信号
+            self.last_signal = enhanced_signal.copy()
+
             # 保存增强的信号
             self.save_enhanced_signal(enhanced_signal)
             

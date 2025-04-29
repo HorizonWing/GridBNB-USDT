@@ -51,6 +51,85 @@ def format_trade_message(side, symbol, price, amount, total, grid_size, retry_co
     
     return message
 
+def format_signal_message(signal_data):
+    """格式化交易信号消息为美观的文本格式
+    
+    Args:
+        signal_data (dict): 包含交易信号信息的字典
+    
+    Returns:
+        str: 格式化后的信号消息文本
+    """
+    # 获取信号数据
+    signal = signal_data.get('signal', '未知')
+    symbol = signal_data.get('symbol', '未知')
+    current_price = signal_data.get('current_price', 0)
+    position_size = signal_data.get('position_size', 0)
+    stop_loss = signal_data.get('stop_loss', 0)
+    take_profit = signal_data.get('take_profit', 0)
+    trend_aligned = signal_data.get('trend_aligned', False)
+    long_trend = signal_data.get('long_trend', '未知')
+    mid_trend = signal_data.get('mid_trend', '未知')
+    short_trend = signal_data.get('short_trend', '未知')
+    timestamp = signal_data.get('timestamp', time.strftime('%Y-%m-%d %H:%M:%S'))
+    advice = signal_data.get('advice', '未知')
+    position_ratio = signal_data.get('position_ratio', 0)
+    confidence = signal_data.get('confidence', '未知')
+    market_state = signal_data.get('market_state', '未知')
+    
+    # 根据信号类型选择emoji
+    signal_emoji = {
+        '买入': '🟢',
+        '卖出': '🔴',
+        '持有': '🟡',
+        '观望': '⚪'
+    }.get(signal, '❓')
+    
+    # 解析交易对获取币种
+    base_currency = symbol.split('/')[0] if '/' in symbol else 'BNB'
+    quote_currency = symbol.split('/')[1] if '/' in symbol else 'USDT'
+    
+    # 构建信号消息
+    message = f"""
+{signal_emoji} {signal}信号 - {symbol}
+━━━━━━━━━━━━━━━━━━━━
+💰 当前价格: {current_price:.2f} {quote_currency}
+📊 建议操作: {advice}
+🎯 仓位比例: {position_ratio:.2f} ({position_ratio*100:.0f}%)
+"""
+    
+    # 如果有止损止盈信息且不为0
+    if stop_loss > 0 and take_profit > 0:
+        message += f"""
+🛑 止损价位: {stop_loss:.2f} {quote_currency}
+💹 止盈价位: {take_profit:.2f} {quote_currency}
+"""
+    
+    # 添加趋势信息
+    trend_status = "✅ 趋势一致" if trend_aligned else "⚠️ 趋势不一致"
+    message += f"""
+📈 趋势分析: {trend_status}
+  • 长期: {long_trend}
+  • 中期: {mid_trend}
+  • 短期: {short_trend}
+"""
+    
+    # 添加信心度和市场状态
+    confidence_emoji = {
+        '高': '🔥',
+        '中': '⚡',
+        '低': '❄️'
+    }.get(confidence, '❓')
+    
+    message += f"""
+{confidence_emoji} 信心指数: {confidence}
+🌐 市场状态: {market_state}
+⏰ 分析时间: {timestamp}
+"""
+    
+    return message
+
+
 def send_pushplus_message(content, title="交易信号通知"):
     if not PUSHPLUS_TOKEN:
         logging.error("未配置PUSHPLUS_TOKEN，无法发送通知")

@@ -4,6 +4,7 @@ import logging
 
 load_dotenv()
 
+ENABLE_SIGNAL_PUSH = os.getenv('ENABLE_SIGNAL_PUSH', True)
 PUSH_URL = os.getenv('PUSH_URL')
 SYMBOL = os.getenv('SYMBOL') if os.getenv('SYMBOL') else 'BNB/USDT'
 INITIAL_GRID = 2.0
