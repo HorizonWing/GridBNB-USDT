@@ -57,13 +57,16 @@ def send_pushplus_message(content, title="交易信号通知"):
         return
     
     url = PUSH_URL if PUSH_URL else "https://push.cdnfast.link/api/push/w8IsyyvW0PpZCbqs"
+    headers = {
+        "Content-Type": "application/json"
+    }
     data = {
         "title": title,
         "content": content,
     }
     try:
         logging.info(f"正在发送推送通知: {title}")
-        response = requests.post(url, data=data)
+        response = requests.post(url, json=data, headers=headers)
         response_json = response.json()
         
         if response.status_code == 200 and response_json.get('code') == 200:
