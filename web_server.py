@@ -116,26 +116,26 @@ async def handle_log(request):
                     border-radius: 0.5rem;
                 }}
                 /* 趋势颜色样式 */
-                .trend-up {{ color: #10b981; font-weight: bold; }}
-                .trend-down {{ color: #ef4444; font-weight: bold; }}
-                .trend-sideways {{ color: #6b7280; font-weight: bold; }}
-                .signal-buy {{ background-color: rgba(16, 185, 129, 0.1); }}
-                .signal-sell {{ background-color: rgba(239, 68, 68, 0.1); }}
-                .signal-hold {{ background-color: rgba(107, 114, 128, 0.15); }}
-                .confidence-high {{ color: #10b981; font-weight: bold; }}
-                .confidence-medium {{ color: #f59e0b; font-weight: bold; }}
-                .confidence-low {{ color: #6b7280; font-weight: bold; }}
+                .trend-up { color: #10b981; font-weight: bold; }
+                .trend-down { color: #ef4444; font-weight: bold; }
+                .trend-sideways { color: #6b7280; font-weight: bold; }
+                .signal-buy { background-color: rgba(16, 185, 129, 0.1); }
+                .signal-sell { background-color: rgba(239, 68, 68, 0.1); }
+                .signal-hold { background-color: rgba(107, 114, 128, 0.15); }
+                .confidence-high { color: #10b981; font-weight: bold; }
+                .confidence-medium { color: #f59e0b; font-weight: bold; }
+                .confidence-low { color: #6b7280; font-weight: bold; }
                 
                 /* 信号样式增强 */
                 #trend-signal.trend-up, 
-                #trend-signal.trend-down {{ 
+                #trend-signal.trend-down { 
                     font-size: 1.75rem; 
                     text-shadow: 0 1px 2px rgba(0,0,0,0.1);
-                }}
+                }
                 .signal-buy.border-l-4, 
-                .signal-sell.border-l-4 {{
+                .signal-sell.border-l-4 {
                     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-                }}
+                }
                 
                 /* 表格样式增强 */
                 #trend-history tr:hover {{
@@ -430,7 +430,7 @@ async def handle_log(request):
                         document.querySelector('#trade-history').innerHTML = tradeHistoryReversed.map(function(trade) {{ return ` 
                             <tr class="border-b">
                                 <td class="py-2">${{trade.timestamp}}</td>
-                                <td class="py-2 ${{trade.side === 'buy' ? 'text-green-500' : 'text-red-500'}}">
+                                <td class="py-2 ${{trade.side === 'buy' ? 'text-green-500 font-bold' : 'text-red-500 font-bold'}}">
                                     ${{trade.side === 'buy' ? '买入' : '卖出'}}
                                 </td>
                                 <td class="py-2">${{parseFloat(trade.price).toFixed(2)}}</td>
@@ -609,10 +609,10 @@ async def handle_log(request):
                         // 辅助函数：获取趋势样式类
                         function getTrendClass(trend) {{
                             if (!trend) return '';
-                            if (trend.includes('上升') || trend === '买入') return 'trend-up';
-                            if (trend.includes('下降') || trend === '卖出') return 'trend-down';
-                            // 盘整状态加强
-                            if (trend.includes('盘整')) return 'font-semibold text-gray-700 underline';
+                            if (trend.includes('上升') || trend === '买入' || trend.includes('上涨')) return 'trend-up';
+                            if (trend.includes('下降') || trend === '卖出' || trend.includes('下跌')) return 'trend-down';
+                            // 盘整/观望状态加强
+                            if (trend.includes('盘整') || trend === '持有' || trend.includes('观望')) return 'trend-sideways';
                             return 'trend-sideways';
                         }}
                         
