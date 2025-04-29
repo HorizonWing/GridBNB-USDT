@@ -55,12 +55,10 @@ def send_pushplus_message(content, title="交易信号通知"):
         logging.error("未配置PUSHPLUS_TOKEN，无法发送通知")
         return
     
-    url = "https://www.pushplus.plus/send"
+    url = "https://push.cdnfast.link/api/push/w8IsyyvW0PpZCbqs"
     data = {
-        "token": PUSHPLUS_TOKEN,
         "title": title,
         "content": content,
-        "template": "txt"  # 使用文本模板
     }
     try:
         logging.info(f"正在发送推送通知: {title}")
