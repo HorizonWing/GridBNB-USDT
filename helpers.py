@@ -2,6 +2,7 @@ import logging
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential
 from config import PUSHPLUS_TOKEN
+from config import PUSH_URL
 import time
 import psutil
 import os
@@ -55,7 +56,7 @@ def send_pushplus_message(content, title="交易信号通知"):
         logging.error("未配置PUSHPLUS_TOKEN，无法发送通知")
         return
     
-    url = "https://push.cdnfast.link/api/push/w8IsyyvW0PpZCbqs"
+    url = PUSH_URL if PUSH_URL else "https://push.cdnfast.link/api/push/w8IsyyvW0PpZCbqs"
     data = {
         "title": title,
         "content": content,

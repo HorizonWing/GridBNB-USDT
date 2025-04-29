@@ -4,6 +4,7 @@ import logging
 
 load_dotenv()
 
+PUSH_URL = os.getenv('PUSH_URL')
 SYMBOL = os.getenv('SYMBOL') if os.getenv('SYMBOL') else 'BNB/USDT'
 INITIAL_GRID = 2.0
 FLIP_THRESHOLD = lambda grid_size: (grid_size / 5) / 100  # 网格大小的1/5的1%
