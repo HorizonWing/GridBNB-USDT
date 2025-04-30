@@ -147,6 +147,39 @@ async def handle_log(request):
                     padding-bottom: 8px;
                     border-bottom: 1px solid #e5e7eb;
                 }
+                
+                /* 加载中动画 */
+                .loading {
+                    display: inline-block;
+                    width: 1.5rem;
+                    height: 1.5rem;
+                    border: 3px solid rgba(107, 114, 128, 0.3);
+                    border-radius: 50%;
+                    border-top-color: #3b82f6;
+                    animation: spin 1s ease-in-out infinite;
+                }
+                
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                
+                /* 突出显示当前价格 */
+                #contract-current-price, #current-price {
+                    background-color: rgba(59, 130, 246, 0.1);
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    transition: background-color 0.3s;
+                }
+                
+                /* 数值变化动画 */
+                .value-changed {
+                    animation: highlight 1s ease-out;
+                }
+                
+                @keyframes highlight {
+                    0% { background-color: rgba(59, 130, 246, 0.3); }
+                    100% { background-color: transparent; }
+                }
             </style>
         </head>
         <body class="bg-gray-100">
@@ -395,19 +428,27 @@ async def handle_log(request):
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div class="p-4 bg-gray-50 rounded-lg">
                             <div class="text-sm text-gray-600">最新趋势</div>
-                            <div class="text-2xl font-bold mt-1" id="trend-direction">--</div>
+                            <div class="text-2xl font-bold mt-1" id="trend-direction">
+                                <span class="loading"></span> 加载中...
+                            </div>
                         </div>
                         <div class="p-4 bg-gray-50 rounded-lg">
                             <div class="text-sm text-gray-600">最新信号</div>
-                            <div class="text-2xl font-bold mt-1" id="trend-signal">--</div>
+                            <div class="text-2xl font-bold mt-1" id="trend-signal">
+                                <span class="loading"></span> 加载中...
+                            </div>
                         </div>
                         <div class="p-4 bg-gray-50 rounded-lg">
                             <div class="text-sm text-gray-600">信号置信度</div>
-                            <div class="text-2xl font-bold mt-1" id="trend-confidence">--</div>
+                            <div class="text-2xl font-bold mt-1" id="trend-confidence">
+                                <span class="loading"></span> 加载中...
+                            </div>
                         </div>
                         <div class="p-4 bg-gray-50 rounded-lg">
                             <div class="text-sm text-gray-600">分析时间</div>
-                            <div class="text-xl font-bold mt-1" id="trend-time">--</div>
+                            <div class="text-xl font-bold mt-1" id="trend-time">
+                                <span class="loading"></span> 加载中...
+                            </div>
                         </div>
                     </div>
                     
@@ -459,13 +500,28 @@ async def handle_log(request):
                             return;
                         }
                         
+                        // 更新价格前保存旧值，用于检测变化
+                        const oldPrice = document.querySelector('#current-price').textContent;
+                        
+                        // 更新当前价格
+                        const priceElement = document.querySelector('#current-price');
+                        if (data.current_price) {
+                            const newPriceText = data.current_price.toFixed(2);
+                            // 如果价格已变化，添加动画效果
+                            if (oldPrice !== newPriceText + ' USDT' && oldPrice !== '--') {
+                                priceElement.classList.add('value-changed');
+                                setTimeout(() => {
+                                    priceElement.classList.remove('value-changed');
+                                }, 1000);
+                            }
+                            priceElement.textContent = newPriceText + ' USDT';
+                        } else {
+                            priceElement.textContent = '--';
+                        }
+                        
                         // 更新基本信息
                         document.querySelector('#base-price').textContent = 
                             data.base_price ? data.base_price.toFixed(2) + ' USDT' : '--';
-                        
-                        // 更新当前价格
-                        document.querySelector('#current-price').textContent = 
-                            data.current_price ? data.current_price.toFixed(2) : '--';
                         
                         // 更新 S1 信息和仓位
                         document.querySelector('#s1-high').textContent = 
@@ -574,28 +630,44 @@ async def handle_log(request):
                                 position.entry_price ? position.entry_price.toFixed(2) + ' USDT' : '--';
                                 
                             // 更新当前价格和价格变动
-                            document.querySelector('#contract-current-price').textContent = 
-                                data.current_price ? data.current_price.toFixed(2) + ' USDT' : '--';
+                            const contractPriceElement = document.querySelector('#contract-current-price');
+                            const oldContractPrice = contractPriceElement.textContent;
+                            
+                            if (data.current_price) {
+                                const newPriceText = data.current_price.toFixed(2) + ' USDT';
+                                // 如果价格已变化，添加动画效果
+                                if (oldContractPrice !== newPriceText && oldContractPrice !== '--') {
+                                    contractPriceElement.classList.add('value-changed');
+                                    setTimeout(() => {
+                                        contractPriceElement.classList.remove('value-changed');
+                                    }, 1000);
+                                }
+                                contractPriceElement.textContent = newPriceText;
                                 
-                            // 计算并显示价格变动
-                            if (data.current_price && position.entry_price) {
-                                const priceChange = data.current_price - position.entry_price;
-                                const priceChangePercent = (priceChange / position.entry_price) * 100;
-                                
-                                const priceChangeElement = document.querySelector('#price-change');
-                                const changeText = priceChangePercent.toFixed(2) + '% (' + 
-                                    (priceChange >= 0 ? '+' : '') + priceChange.toFixed(2) + ' USDT)';
+                                // 计算并显示价格变动
+                                if (position.entry_price) {
+                                    const priceChange = data.current_price - position.entry_price;
+                                    const priceChangePercent = (priceChange / position.entry_price) * 100;
                                     
-                                priceChangeElement.textContent = changeText;
-                                
-                                // 设置价格变动颜色（上涨绿色，下跌红色）
-                                if (position.side === 'long') {
-                                    priceChangeElement.className = priceChange >= 0 ? 'status-value profit' : 'status-value loss';
+                                    const priceChangeElement = document.querySelector('#price-change');
+                                    const changeText = priceChangePercent.toFixed(2) + '% (' + 
+                                        (priceChange >= 0 ? '+' : '') + priceChange.toFixed(2) + ' USDT)';
+                                        
+                                    priceChangeElement.textContent = changeText;
+                                    
+                                    // 设置价格变动颜色（上涨绿色，下跌红色）
+                                    if (position.side === 'long') {
+                                        priceChangeElement.className = priceChange >= 0 ? 'status-value profit' : 'status-value loss';
+                                    } else {
+                                        // 对于空仓，价格下跌是盈利
+                                        priceChangeElement.className = priceChange <= 0 ? 'status-value profit' : 'status-value loss';
+                                    }
                                 } else {
-                                    // 对于空仓，价格下跌是盈利
-                                    priceChangeElement.className = priceChange <= 0 ? 'status-value profit' : 'status-value loss';
+                                    document.querySelector('#price-change').textContent = '--';
+                                    document.querySelector('#price-change').className = 'status-value';
                                 }
                             } else {
+                                contractPriceElement.textContent = '--';
                                 document.querySelector('#price-change').textContent = '--';
                                 document.querySelector('#price-change').className = 'status-value';
                             }
@@ -688,7 +760,7 @@ async def handle_log(request):
                                     latest.trend === 'down' ? 'text-2xl font-bold mt-1 trend-down' : 
                                     'text-2xl font-bold mt-1 trend-sideways';
                             } else {
-                                directionElement.textContent = '--';
+                                directionElement.textContent = '无趋势数据';
                                 directionElement.className = 'text-2xl font-bold mt-1';
                             }
                             
@@ -702,7 +774,7 @@ async def handle_log(request):
                                     latest.signal === 'sell' ? 'text-2xl font-bold mt-1 trend-down' : 
                                     'text-2xl font-bold mt-1 trend-sideways';
                             } else {
-                                signalElement.textContent = '--';
+                                signalElement.textContent = '无信号数据';
                                 signalElement.className = 'text-2xl font-bold mt-1';
                             }
                             
@@ -716,13 +788,13 @@ async def handle_log(request):
                                     latest.confidence === 'medium' ? 'text-2xl font-bold mt-1 confidence-medium' : 
                                     'text-2xl font-bold mt-1 confidence-low';
                             } else {
-                                confidenceElement.textContent = '--';
+                                confidenceElement.textContent = '无置信度数据';
                                 confidenceElement.className = 'text-2xl font-bold mt-1';
                             }
                             
                             // 设置分析时间
                             document.querySelector('#trend-time').textContent = 
-                                latest.timestamp ? latest.timestamp : '--';
+                                latest.timestamp ? latest.timestamp : '无时间数据';
                             
                             // 更新历史趋势记录
                             if (data.trend_data.history && data.trend_data.history.length > 0) {
@@ -774,7 +846,15 @@ async def handle_log(request):
                                     // 添加价格列
                                     const priceCell = document.createElement('td');
                                     priceCell.className = 'px-3 py-2';
-                                    priceCell.textContent = record.price ? record.price.toFixed(2) : '--';
+                                    if (record.price && record.price > 0) {
+                                        // 如果价格大于0，显示价格
+                                        priceCell.textContent = record.price.toFixed(2);
+                                    } else if (record.close && record.close > 0) {
+                                        // 有些数据可能使用close字段而不是price字段
+                                        priceCell.textContent = record.close.toFixed(2);
+                                    } else {
+                                        priceCell.textContent = '--';
+                                    }
                                     row.appendChild(priceCell);
                                     
                                     // 添加置信度列
@@ -795,17 +875,22 @@ async def handle_log(request):
                                     // 将行添加到表格
                                     historyTableBody.appendChild(row);
                                 });
+                            } else {
+                                document.querySelector('#trend-history').innerHTML = 
+                                    '<tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">暂无历史趋势数据</td></tr>';
                             }
                         } else {
                             // 如果没有趋势数据，设置默认值
-                            document.querySelector('#trend-direction').textContent = '--';
-                            document.querySelector('#trend-direction').className = 'text-2xl font-bold mt-1';
-                            document.querySelector('#trend-signal').textContent = '--';
-                            document.querySelector('#trend-signal').className = 'text-2xl font-bold mt-1';
-                            document.querySelector('#trend-confidence').textContent = '--';
-                            document.querySelector('#trend-confidence').className = 'text-2xl font-bold mt-1';
-                            document.querySelector('#trend-time').textContent = '--';
-                            document.querySelector('#trend-history').innerHTML = '';
+                            document.querySelector('#trend-direction').textContent = '暂无趋势数据';
+                            document.querySelector('#trend-direction').className = 'text-2xl font-bold mt-1 text-gray-500';
+                            document.querySelector('#trend-signal').textContent = '暂无信号数据';
+                            document.querySelector('#trend-signal').className = 'text-2xl font-bold mt-1 text-gray-500';
+                            document.querySelector('#trend-confidence').textContent = '暂无置信度数据';
+                            document.querySelector('#trend-confidence').className = 'text-2xl font-bold mt-1 text-gray-500';
+                            document.querySelector('#trend-time').textContent = '暂无时间数据';
+                            document.querySelector('#trend-time').className = 'text-xl font-bold mt-1 text-gray-500';
+                            document.querySelector('#trend-history').innerHTML = 
+                                '<tr><td colspan="5" class="px-3 py-4 text-center text-gray-500">暂无历史趋势数据</td></tr>';
                         }
                         
                     } catch (error) {
@@ -1140,16 +1225,32 @@ async def get_trend_analysis_data(symbol='BTC/USDT', limit=10):
         # 获取最新信号
         latest_signal = None
         if os.path.exists(signal_file):
-            with open(signal_file, 'r', encoding='utf-8') as f:
-                latest_signal = json.load(f)
+            async with aiofiles.open(signal_file, 'r', encoding='utf-8') as f:
+                content = await f.read()
+                latest_signal = json.loads(content)
         
         # 获取历史信号
         history = []
         if os.path.exists(history_file):
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
+            async with aiofiles.open(history_file, 'r', encoding='utf-8') as f:
+                content = await f.read()
+                history = json.loads(content)
                 # 只返回指定数量的最新记录，但不进行顺序反转，保持文件中的原始顺序
                 history = history[-limit:] if limit > 0 else history
+                
+                # 确保每条记录包含所需数据
+                for item in history:
+                    # 确保趋势字段存在，默认为 'sideways'
+                    if 'trend' not in item:
+                        item['trend'] = 'sideways'
+                    
+                    # 确保价格字段存在，默认为0
+                    if 'price' not in item:
+                        item['price'] = 0
+                        
+                    # 确保时间戳字段存在
+                    if 'timestamp' not in item:
+                        item['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
         return {
             'latest': latest_signal,
