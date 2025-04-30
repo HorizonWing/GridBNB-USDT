@@ -4,6 +4,9 @@ import logging
 
 load_dotenv()
 
+# 交易模式配置
+USE_TREND_TRADING = os.getenv('USE_TREND_TRADING', 'true').lower() == 'true'  # 默认使用趋势交易
+
 ENABLE_SIGNAL_PUSH = os.getenv('ENABLE_SIGNAL_PUSH', True)
 PUSH_URL = os.getenv('PUSH_URL')
 SYMBOL = os.getenv('SYMBOL') if os.getenv('SYMBOL') else 'BNB/USDT'
@@ -25,9 +28,18 @@ DEBUG_MODE = False  # 设置为True时显示详细日志
 API_TIMEOUT = 10000  # API超时时间（毫秒）
 RECV_WINDOW = 5000  # 接收窗口时间（毫秒）
 RISK_CHECK_INTERVAL = 300  # 5分钟检查一次风控
-TREND_INTERVAL = os.getenv('TREND_INTERVAL', 60)  # 趋势分析间隔（秒）
+TREND_INTERVAL = int(os.getenv('TREND_INTERVAL', 60))  # 趋势分析间隔（秒）
 ENABLE_TREND_ANALYZER = True  # 是否启用趋势分析
 TREND_OUTPUT_DIR = "data"  # 趋势分析输出目录
+
+# 趋势交易特定配置
+TREND_TIMEFRAME = os.getenv('TREND_TIMEFRAME', '15m')  # 趋势分析时间周期
+LEVERAGE = int(os.getenv('LEVERAGE', 3))  # 合约杠杆倍数
+RISK_PER_TRADE = float(os.getenv('RISK_PER_TRADE', 0.02))  # 每笔交易风险比例
+ATR_PERIOD = int(os.getenv('ATR_PERIOD', 14))  # ATR计算周期
+SL_ATR_MULTIPLIER = float(os.getenv('SL_ATR_MULTIPLIER', 2.0))  # 止损ATR乘数
+TP_ATR_MULTIPLIER = float(os.getenv('TP_ATR_MULTIPLIER', 3.0))  # 止盈ATR乘数
+
 try:
     INITIAL_BASE_PRICE = float(os.getenv('INITIAL_BASE_PRICE', 0))
 except ValueError:
@@ -48,6 +60,9 @@ except ValueError:
     logging.warning("无效的INITIAL_PRINCIPAL配置，已重置为0")
 
 class TradingConfig:
+    # 系统配置
+    USE_TREND_TRADING = USE_TREND_TRADING
+    
     RISK_PARAMS = {
         'max_drawdown': MAX_DRAWDOWN,
         'daily_loss_limit': DAILY_LOSS_LIMIT,
@@ -93,6 +108,14 @@ class TradingConfig:
     MAX_POSITION_PERCENT = MAX_POSITION_PERCENT
     # 添加初始本金到类属性
     INITIAL_PRINCIPAL = INITIAL_PRINCIPAL
+    
+    # 趋势交易特定配置
+    TREND_TIMEFRAME = TREND_TIMEFRAME
+    LEVERAGE = LEVERAGE
+    RISK_PER_TRADE = RISK_PER_TRADE
+    ATR_PERIOD = ATR_PERIOD
+    SL_ATR_MULTIPLIER = SL_ATR_MULTIPLIER
+    TP_ATR_MULTIPLIER = TP_ATR_MULTIPLIER
 
     def __init__(self):
         # 添加配置验证
@@ -152,6 +175,14 @@ class TradingConfig:
         self.MAX_POSITION_PERCENT = MAX_POSITION_PERCENT
         # 将初始本金赋值给实例属性
         self.INITIAL_PRINCIPAL = INITIAL_PRINCIPAL
+        
+        # 添加趋势交易参数
+        self.TREND_TIMEFRAME = TREND_TIMEFRAME
+        self.LEVERAGE = LEVERAGE
+        self.RISK_PER_TRADE = RISK_PER_TRADE
+        self.ATR_PERIOD = ATR_PERIOD
+        self.SL_ATR_MULTIPLIER = SL_ATR_MULTIPLIER
+        self.TP_ATR_MULTIPLIER = TP_ATR_MULTIPLIER
 
     # Removed unused update methods (update_risk_params, update_grid_params, 
     # update_symbol, update_initial_base_price, update_risk_check_interval, 

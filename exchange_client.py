@@ -5,11 +5,13 @@ from config import SYMBOL, DEBUG_MODE, API_TIMEOUT, RECV_WINDOW
 from datetime import datetime
 import time
 import asyncio
+import config
 
 class ExchangeClient:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self._verify_credentials()
+        self.use_trend_trading = config.USE_TREND_TRADING if hasattr(config, 'USE_TREND_TRADING') else True
         
         # 先初始化交易所实例
         self.exchange = ccxt.binance({
@@ -18,18 +20,20 @@ class ExchangeClient:
             'enableRateLimit': True,
             'timeout': 60000,  # 增加超时时间到60秒
             'options': {
-                'defaultType': 'spot',
+                'defaultType': 'spot' if not self.use_trend_trading else 'swap',  # 根据配置动态切换
                 'fetchMarkets': {
-                    'spot': True,     # 启用现货市场
-                    'margin': False,  # 明确禁用杠杆
-                    'swap': False,   # 禁用合约
-                    'future': False  # 禁用期货
+                    'spot':  True,     # 启用现货市场
+                    'margin': False,   # 明确禁用杠杆
+                    'swap': True,      # 启用U本位合约
+                    'future': False    # 禁用币本位合约
                 },
-                'fetchCurrencies': False,
-                'recvWindow': 5000,  # 固定接收窗口
+                'defaultNetwork': 'ERC20',
+                'recvWindow': 10000,   # 增加接收窗口以适应更长时间的操作
                 'adjustForTimeDifference': True,  # 启用时间调整
                 'warnOnFetchOpenOrdersWithoutSymbol': False,
-                'createMarketBuyOrderRequiresPrice': False
+                'createMarketBuyOrderRequiresPrice': False,
+                'createOrderByQuoteAmount': False,  # 确保是小写，符合CCXT参数要求
+                'broker': 'CCXT'       # 使用指定的经纪商标识
             },
             'proxies': None,  # 完全禁用代理
             'verbose': DEBUG_MODE
@@ -165,28 +169,61 @@ class ExchangeClient:
             return self.balance_cache['data']
         
         try:
-            params = params or {}
-            params['timestamp'] = int(time.time() * 1000) + self.time_diff
-            balance = await self.exchange.fetch_balance(params)
-            
-            # 获取理财账户余额
-            funding_balance = await self.fetch_funding_balance()
-            
-            # 合并现货和理财余额
-            for asset, amount in funding_balance.items():
-                if asset not in balance['total']:
-                    balance['total'][asset] = 0
-                if asset not in balance['free']:
-                    balance['free'][asset] = 0
-                balance['total'][asset] += amount
-            
-            self.logger.debug(f"账户余额概要: {balance['total']}")
-            self.balance_cache = {'timestamp': now, 'data': balance}
-            return balance
+            # 确保使用现货账户类型
+            previous_type = self.exchange.options['defaultType']
+            try:
+                # 明确设置为现货模式
+                self.exchange.options['defaultType'] = 'spot'
+                
+                # 同步时间以避免时间戳错误
+                await self.sync_time()
+                
+                # 构建参数
+                params = params or {}
+                params['timestamp'] = int(time.time() * 1000 + self.time_diff)
+                params['recvWindow'] = 10000  # 使用更大的接收窗口
+                
+                # 获取余额
+                balance = await self.exchange.fetch_balance(params)
+                
+                # 尝试获取理财账户余额
+                try:
+                    funding_balance = await self.fetch_funding_balance()
+                    
+                    # 合并现货和理财余额
+                    for asset, amount in funding_balance.items():
+                        if asset not in balance['total']:
+                            balance['total'][asset] = 0
+                        if asset not in balance['free']:
+                            balance['free'][asset] = 0
+                        balance['total'][asset] += amount
+                except Exception as e:
+                    self.logger.warning(f"获取理财余额失败，仅返回现货余额: {str(e)}")
+                
+                self.logger.debug(f"账户余额概要: {balance['total']}")
+                self.balance_cache = {'timestamp': now, 'data': balance}
+                return balance
+                
+            except Exception as e:
+                error_str = str(e)
+                
+                # 权限问题特殊处理
+                if "Invalid API-key" in error_str or "IP, or permissions" in error_str:
+                    self.logger.warning(f"API权限不足，无法获取完整余额信息: {error_str}")
+                    # 返回空但结构完整的余额
+                    return {'free': {}, 'used': {}, 'total': {}}
+                    
+                # 其他异常继续抛出
+                raise
+                
         except Exception as e:
             self.logger.error(f"获取余额失败: {str(e)}")
             # 出错时不抛出异常，而是返回一个空的但结构完整的余额字典
             return {'free': {}, 'used': {}, 'total': {}}
+        finally:
+            # 恢复原始设置
+            if 'previous_type' in locals():
+                self.exchange.options['defaultType'] = previous_type
     
     async def create_order(self, symbol, type, side, amount, price):
         try:
@@ -201,6 +238,159 @@ class ExchangeClient:
         except Exception as e:
             self.logger.error(f"下单失败: {str(e)}")
             raise
+    
+    async def create_market_order(self, symbol, side, amount, params=None):
+        """创建市价单，支持合约交易参数"""
+        try:
+            # 在下单前重新同步时间
+            await self.sync_time()
+            
+            # 初始化参数
+            params = params or {}
+            params['timestamp'] = int(time.time() * 1000 + self.time_diff)
+            params['recvWindow'] = 10000  # 增加接收窗口
+            
+            # 检查市场数据是否已加载
+            if not self.markets_loaded:
+                await self.load_markets()
+            
+            # 记录原始类型
+            previous_type = self.exchange.options['defaultType']
+            is_contract = False
+            
+            try:
+                # 处理合约相关参数
+                if 'leverage' in params:
+                    # 先设置杠杆
+                    leverage = params.pop('leverage')  # 移除leverage参数，因为下单API不接受此参数
+                    await self.set_leverage(leverage, symbol)
+                
+                # 检测是否为合约交易
+                if any(key in params for key in ['reduceOnly', 'closePosition', 'positionSide']) or 'leverage' in locals():
+                    is_contract = True
+                    self.exchange.options['defaultType'] = 'swap'
+                    self.logger.info(f"切换到合约模式进行交易")
+                
+                # 获取市场信息
+                market = self.exchange.market(symbol)
+                
+                # 确保数量格式正确
+                precision = market.get('precision', {}).get('amount', 0)
+                if precision > 0:
+                    # 根据交易所要求的精度格式化数量
+                    amount_str = ('{:.' + str(precision) + 'f}').format(amount)
+                    amount = float(amount_str)
+                
+                self.logger.info(f"创建{side}市价单: {symbol}, 数量: {amount}, 模式: {previous_type if not is_contract else 'swap'}")
+                order = await self.exchange.create_order(symbol, 'market', side, amount, None, params)
+                
+                self.logger.info(f"下单成功: {order.get('id')}")
+                return order
+            
+            except Exception as e:
+                error_str = str(e)
+                
+                # 权限问题特殊处理
+                if "Invalid API-key" in error_str or "IP, or permissions" in error_str:
+                    self.logger.error("API密钥权限不足，请确保API密钥有合约交易权限，且已开启IP白名单")
+                    raise ValueError("API密钥权限不足，无法进行合约交易。请检查API权限设置和IP白名单")
+                    
+                # 其他异常继续抛出
+                raise
+                
+        except Exception as e:
+            self.logger.error(f"创建市价单失败: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            raise
+        finally:
+            # 确保还原设置，无论是否有异常
+            if 'previous_type' in locals():
+                self.exchange.options['defaultType'] = previous_type
+    
+    async def set_leverage(self, leverage, symbol):
+        """设置合约杠杆"""
+        try:
+            # 确保市场数据已加载
+            if not self.markets_loaded:
+                await self.load_markets()
+                
+            # 获取市场信息
+            market = self.exchange.market(symbol)
+            
+            # 设置USDT合约模式
+            previous_type = self.exchange.options['defaultType']
+            self.exchange.options['defaultType'] = 'swap'
+            
+            # 准备参数
+            params = {
+                'leverage': leverage,
+                'symbol': market['id'],
+                'timestamp': int(time.time() * 1000 + self.time_diff)
+            }
+            
+            # 调用币安的设置杠杆API
+            result = await self.exchange.fapiPrivatePostLeverage(params)
+            self.logger.info(f"设置杠杆成功: {symbol} 杠杆={leverage}")
+            
+            # 恢复默认设置
+            self.exchange.options['defaultType'] = previous_type
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"设置杠杆失败: {str(e)}")
+            # 确保还原设置
+            self.exchange.options['defaultType'] = 'spot'
+            raise
+    
+    async def fetch_positions(self, symbols=None):
+        """获取当前合约持仓"""
+        try:
+            # 确保市场数据已加载
+            if not self.markets_loaded:
+                await self.load_markets()
+            
+            # 先同步时间避免API错误
+            await self.sync_time()
+                
+            # 保存当前设置
+            previous_type = self.exchange.options['defaultType']
+            
+            try:
+                # 设置USDT合约模式
+                self.exchange.options['defaultType'] = 'swap'
+                
+                # 构建完整的参数
+                params = {
+                    'timestamp': int(time.time() * 1000 + self.time_diff),
+                    'recvWindow': 10000
+                }
+                
+                # 尝试直接获取持仓信息
+                positions = await self.exchange.fetch_positions(symbols, params)
+                
+                self.logger.info(f"获取持仓成功，共{len(positions)}个持仓")
+                return positions
+            
+            except Exception as e:
+                error_str = str(e)
+                
+                # 权限问题特殊处理
+                if "Invalid API-key" in error_str or "IP, or permissions" in error_str:
+                    self.logger.error("API密钥权限不足，请确保API密钥有合约交易权限，且已开启IP白名单")
+                    # 返回空持仓而不是抛出异常
+                    return []
+                
+                # 其他异常继续抛出
+                raise
+                
+        except Exception as e:
+            self.logger.error(f"获取持仓信息失败: {str(e)}")
+            # 尝试返回空列表而不是失败
+            return []
+        finally:
+            # 恢复默认设置，确保一定会执行
+            self.exchange.options['defaultType'] = previous_type if 'previous_type' in locals() else 'spot'
     
     async def fetch_order(self, order_id, symbol, params=None):
         if params is None:

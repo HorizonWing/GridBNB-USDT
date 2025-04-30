@@ -184,6 +184,68 @@ async def handle_log(request):
                         </div>
                     </div>
                     
+                    <!-- 新增合约持仓状态卡片 -->
+                    <div class="card">
+                        <h2 class="text-lg font-semibold mb-4">合约持仓状态</h2>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span>持仓方向</span>
+                                <span class="status-value" id="contract-position-side">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>持仓数量</span>
+                                <span class="status-value" id="contract-position-size">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>杠杆倍数</span>
+                                <span class="status-value" id="contract-leverage">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>入场价格</span>
+                                <span class="status-value" id="contract-entry-price">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>止损价</span>
+                                <span class="status-value" id="contract-stop-loss">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>止盈价</span>
+                                <span class="status-value" id="contract-take-profit">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>浮动盈亏</span>
+                                <span class="status-value" id="contract-pnl">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 新增ATR风控卡片 -->
+                    <div class="card">
+                        <h2 class="text-lg font-semibold mb-4">ATR风险控制</h2>
+                        <div class="space-y-2">
+                            <div class="flex justify-between">
+                                <span>ATR(14)</span>
+                                <span class="status-value" id="atr-value">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>风险比例</span>
+                                <span class="status-value" id="risk-per-trade">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>ATR止损倍数</span>
+                                <span class="status-value" id="sl-atr-multiplier">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>ATR止盈倍数</span>
+                                <span class="status-value" id="tp-atr-multiplier">--</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span>是否震荡</span>
+                                <span class="status-value" id="is-consolidating">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <div class="card">
                         <h2 class="text-lg font-semibold mb-4">网格参数</h2>
                         <div class="space-y-2">
@@ -399,6 +461,78 @@ async def handle_log(request):
                             data.s1_daily_low ? data.s1_daily_low.toFixed(2) : '--';
                         document.querySelector('#position-percentage').textContent = 
                             data.position_percentage != null ? data.position_percentage.toFixed(2) + '%' : '--';
+                        
+                        // 更新合约持仓状态
+                        if (data.contract_position) {{
+                            const position = data.contract_position;
+                            
+                            // 持仓方向
+                            const sideElement = document.querySelector('#contract-position-side');
+                            sideElement.textContent = position.side ? (position.side === 'long' ? '多仓' : '空仓') : '无持仓';
+                            sideElement.className = `status-value ${{
+                                position.side === 'long' ? 'text-green-500 font-bold' : 
+                                position.side === 'short' ? 'text-red-500 font-bold' : ''
+                            }}`;
+                            
+                            // 持仓数量
+                            document.querySelector('#contract-position-size').textContent = 
+                                position.size ? position.size.toFixed(4) : '--';
+                                
+                            // 杠杆倍数
+                            document.querySelector('#contract-leverage').textContent = 
+                                position.leverage ? position.leverage + 'x' : '--';
+                                
+                            // 入场价格
+                            document.querySelector('#contract-entry-price').textContent = 
+                                position.entry_price ? position.entry_price.toFixed(2) : '--';
+                                
+                            // 止损价
+                            document.querySelector('#contract-stop-loss').textContent = 
+                                position.stop_loss ? position.stop_loss.toFixed(2) : '--';
+                                
+                            // 止盈价
+                            document.querySelector('#contract-take-profit').textContent = 
+                                position.take_profit ? position.take_profit.toFixed(2) : '--';
+                                
+                            // 浮动盈亏
+                            const pnlElement = document.querySelector('#contract-pnl');
+                            pnlElement.textContent = position.unrealized_pnl ? 
+                                position.unrealized_pnl.toFixed(2) + ' USDT' : '--';
+                            pnlElement.className = `status-value ${{
+                                position.unrealized_pnl > 0 ? 'profit' : 
+                                position.unrealized_pnl < 0 ? 'loss' : ''
+                            }}`;
+                        }} else {{
+                            // 无持仓状态
+                            document.querySelector('#contract-position-side').textContent = '无持仓';
+                            document.querySelector('#contract-position-size').textContent = '--';
+                            document.querySelector('#contract-leverage').textContent = '--';
+                            document.querySelector('#contract-entry-price').textContent = '--';
+                            document.querySelector('#contract-stop-loss').textContent = '--';
+                            document.querySelector('#contract-take-profit').textContent = '--';
+                            document.querySelector('#contract-pnl').textContent = '--';
+                        }}
+                        
+                        // 更新ATR风控信息
+                        document.querySelector('#atr-value').textContent = 
+                            data.atr ? data.atr.toFixed(2) : '--';
+                        document.querySelector('#risk-per-trade').textContent = 
+                            data.risk_per_trade ? (data.risk_per_trade * 100).toFixed(2) + '%' : '--';
+                        document.querySelector('#sl-atr-multiplier').textContent = 
+                            data.sl_atr_multiplier ? data.sl_atr_multiplier.toFixed(1) + 'x' : '--';
+                        document.querySelector('#tp-atr-multiplier').textContent = 
+                            data.tp_atr_multiplier ? data.tp_atr_multiplier.toFixed(1) + 'x' : '--';
+                            
+                        // 是否震荡市场
+                        const consolidatingElement = document.querySelector('#is-consolidating');
+                        if (data.is_consolidating !== undefined) {{
+                            consolidatingElement.textContent = data.is_consolidating ? '是' : '否';
+                            consolidatingElement.className = `status-value ${{
+                                data.is_consolidating ? 'text-yellow-500 font-bold' : 'text-blue-500'
+                            }}`;
+                        }} else {{
+                            consolidatingElement.textContent = '--';
+                        }}
                         
                         // 更新网格参数
                         document.querySelector('#grid-size').textContent = 
@@ -695,12 +829,11 @@ async def handle_status(request):
                 'amount': trade.get('amount', 0),
                 'profit': trade.get('profit', 0)
             } for trade in trades[-10:]]  # 只取最近10笔交易
-            # 注意：保持原始顺序，由前端JavaScript实现倒序显示
         
-        # 计算目标委托金额 (总资产的10%)
-        target_order_amount = await trader._calculate_order_amount('buy') # buy/sell 结果一样
+        # 计算目标委托金额
+        target_order_amount = await trader._calculate_order_amount('buy')
         
-        # 获取仓位百分比 - 使用风控管理器的方法获取最准确的仓位比例
+        # 获取仓位百分比
         position_ratio = await trader.risk_manager._get_position_ratio()
         position_percentage = position_ratio * 100
         
@@ -710,6 +843,55 @@ async def handle_status(request):
         
         # 获取趋势分析数据
         trend_data = await get_trend_analysis_data(symbol=SYMBOL, limit=10)
+        
+        # 获取合约持仓数据（如果是TrendTrader）
+        contract_position = None
+        atr = None
+        risk_per_trade = None
+        sl_atr_multiplier = None
+        tp_atr_multiplier = None
+        is_consolidating = None
+        
+        # 检查是否是TrendTrader并获取特定属性
+        if hasattr(trader, 'current_position') and hasattr(trader, 'current_atr'):
+            # 合约持仓信息
+            try:
+                # 尝试获取合约持仓状态
+                positions = await trader.exchange.fetch_positions(symbols=[SYMBOL])
+                current_position = trader.current_position
+                
+                if current_position and trader.entry_price:
+                    # 有持仓，计算浮动盈亏
+                    unrealized_pnl = 0
+                    if current_position == 'long':
+                        unrealized_pnl = (current_price - trader.entry_price) * trader.position_size
+                    else:  # short
+                        unrealized_pnl = (trader.entry_price - current_price) * trader.position_size
+                        
+                    contract_position = {
+                        'side': current_position,
+                        'size': trader.position_size,
+                        'leverage': trader.config.LEVERAGE,
+                        'entry_price': trader.entry_price,
+                        'stop_loss': trader.stop_loss,
+                        'take_profit': trader.take_profit,
+                        'unrealized_pnl': unrealized_pnl
+                    }
+            except Exception as e:
+                logging.error(f"获取合约持仓信息失败: {str(e)}")
+                
+            # ATR风控信息
+            atr = trader.current_atr
+            risk_per_trade = trader.risk_per_trade
+            sl_atr_multiplier = trader.sl_atr_multiplier
+            tp_atr_multiplier = trader.tp_atr_multiplier
+            
+            # 判断是否震荡市场
+            if hasattr(trader, 'is_consolidation') and callable(trader.is_consolidation):
+                try:
+                    is_consolidating = trader.is_consolidation()
+                except Exception as e:
+                    logging.error(f"判断震荡行情失败: {str(e)}")
 
         # 构建响应数据
         status = {
@@ -732,7 +914,14 @@ async def handle_status(request):
             "position_percentage": position_percentage,
             "symbol_base": SYMBOL_BASE,
             "symbol_quote": SYMBOL_QUOTE,
-            "trend_data": trend_data  # 添加趋势分析数据
+            "trend_data": trend_data,
+            # 合约相关数据
+            "contract_position": contract_position,
+            "atr": atr,
+            "risk_per_trade": risk_per_trade,
+            "sl_atr_multiplier": sl_atr_multiplier,
+            "tp_atr_multiplier": tp_atr_multiplier,
+            "is_consolidating": is_consolidating
         }
         
         return web.json_response(status)
@@ -784,7 +973,7 @@ async def start_web_server(trader):
     app.router.add_get('/api/trend', handle_trend_analysis)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 58181)
+    site = web.TCPSite(runner, '0.0.0.0', 58182)
     await site.start()
 
     # 打印访问地址

@@ -5,6 +5,7 @@ import os
 import platform
 import sys
 import argparse
+import numpy as np
 from helpers import send_pushplus_message, format_signal_message
 from config import ENABLE_SIGNAL_PUSH
 from datetime import datetime, timedelta
@@ -23,6 +24,47 @@ from trend_trading_system import (
     SignalType,
     TrendDirection
 )
+
+class PositionManager:
+    """仓位管理器"""
+    def __init__(self, initial_balance: float = 10000.0, risk_per_trade: float = 0.02):
+        self.balance = initial_balance
+        self.risk_per_trade = risk_per_trade
+        self.current_position = None
+        self.entry_price = None
+        self.stop_loss = None
+        self.take_profit = None
+        
+    def calculate_position_size(self, atr: float, entry_price: float) -> float:
+        """根据ATR计算仓位大小"""
+        risk_amount = self.balance * self.risk_per_trade
+        position_size = risk_amount / (atr * 2)  # 使用2倍ATR作为止损距离
+        return min(position_size, self.balance / entry_price)  # 确保不超过账户余额
+        
+    def update_position(self, position_type: str, entry_price: float, atr: float):
+        """更新仓位信息"""
+        self.current_position = position_type
+        self.entry_price = entry_price
+        position_size = self.calculate_position_size(atr, entry_price)
+        
+        if position_type == 'long':
+            self.stop_loss = entry_price - atr * 2
+            self.take_profit = entry_price + atr * 3
+        else:  # short
+            self.stop_loss = entry_price + atr * 2
+            self.take_profit = entry_price - atr * 3
+            
+        return position_size
+        
+    def should_close_position(self, current_price: float) -> bool:
+        """检查是否需要平仓"""
+        if not self.current_position:
+            return False
+            
+        if self.current_position == 'long':
+            return current_price <= self.stop_loss or current_price >= self.take_profit
+        else:  # short
+            return current_price >= self.stop_loss or current_price <= self.take_profit
 
 class TrendAnalyzer:
     """趋势分析与交易信号整合系统"""
@@ -68,8 +110,15 @@ class TrendAnalyzer:
         
         # 最近一次分析结果
         self.last_result = None
-        self.last_signal = None  # 添加上一次信号的记录
+        self.last_signal = None
         self.is_running = False
+        
+        # 添加仓位管理器
+        self.position_manager = PositionManager()
+        
+        # 添加ATR计算相关参数
+        self.atr_period = 14
+        self.atr_multiplier = 2.0
         
         self.logger.info(f"趋势主系统初始化完成 - 交易对: {symbol}, 模式: {'模拟' if simulation_mode else '实盘'}")
     
@@ -118,6 +167,67 @@ class TrendAnalyzer:
                 
         return False
 
+    def calculate_atr(self, high_prices: List[float], low_prices: List[float], close_prices: List[float]) -> float:
+        """计算ATR"""
+        if len(high_prices) < self.atr_period:
+            return 0.0
+            
+        tr = []
+        for i in range(1, len(high_prices)):
+            tr1 = high_prices[i] - low_prices[i]
+            tr2 = abs(high_prices[i] - close_prices[i-1])
+            tr3 = abs(low_prices[i] - close_prices[i-1])
+            tr.append(max(tr1, tr2, tr3))
+            
+        return np.mean(tr[-self.atr_period:])
+    
+    def is_consolidation(self, prices: List[float], atr: float) -> bool:
+        """判断是否处于震荡行情"""
+        if len(prices) < 20:
+            return False
+            
+        # 计算价格波动范围
+        price_range = max(prices[-20:]) - min(prices[-20:])
+        # 如果价格波动范围小于2倍ATR，认为是震荡行情
+        return price_range < atr * 2
+    
+    async def execute_trade(self, signal: Dict):
+        """执行交易"""
+        try:
+            current_price = signal.get('current_price', 0)
+            atr = signal.get('atr', 0)
+            position_ratio = signal.get('position_ratio', 0)
+            
+            # 检查是否需要平仓
+            if signal.get('should_close', False):
+                if self.position_manager.current_position:
+                    self.logger.info(f"执行平仓 - 原因: {signal.get('close_reason', '未知')}")
+                    # 这里添加实际的平仓逻辑
+                    self.position_manager.current_position = None
+                    self.position_manager.entry_price = None
+                    self.position_manager.stop_loss = None
+                    self.position_manager.take_profit = None
+            
+            # 检查是否需要开仓
+            elif position_ratio > 0:
+                advice = signal.get('advice', '')
+                if '买入' in advice and (not self.position_manager.current_position or self.position_manager.current_position == 'short'):
+                    # 开多仓
+                    position_size = self.position_manager.update_position('long', current_price, atr)
+                    self.logger.info(f"执行开多仓 - 价格: {current_price}, 仓位: {position_size}")
+                    # 这里添加实际的开多仓逻辑
+                    
+                elif '卖出' in advice and (not self.position_manager.current_position or self.position_manager.current_position == 'long'):
+                    # 开空仓
+                    position_size = self.position_manager.update_position('short', current_price, atr)
+                    self.logger.info(f"执行开空仓 - 价格: {current_price}, 仓位: {position_size}")
+                    # 这里添加实际的开空仓逻辑
+                    
+        except Exception as e:
+            self.logger.error(f"执行交易失败: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+
     async def run_analysis(self) -> Dict:
         """运行一次趋势分析并返回结果"""
         self.logger.info(f"开始趋势分析 - {self.symbol}")
@@ -128,6 +238,9 @@ class TrendAnalyzer:
             
             # 生成更详细的交易信号
             enhanced_signal = self.enhance_signal(result)
+
+            # 执行交易
+            await self.execute_trade(enhanced_signal)
 
             # 只在信号发生变化时发送通知
             if ENABLE_SIGNAL_PUSH and self._should_send_notification(enhanced_signal):
@@ -155,16 +268,33 @@ class TrendAnalyzer:
         """根据分析结果增强交易信号"""
         signal_type = result.get('signal', SignalType.HOLD.value)
         trend_aligned = result.get('trend_aligned', False)
+        short_trend = result.get('short_trend', TrendDirection.SIDEWAYS.value)
+        
+        # 获取价格数据
+        high_prices = result.get('high_prices', [])
+        low_prices = result.get('low_prices', [])
+        close_prices = result.get('close_prices', [])
+        current_price = close_prices[-1] if close_prices else 0
+        
+        # 计算ATR
+        atr = self.calculate_atr(high_prices, low_prices, close_prices)
+        
+        # 判断是否处于震荡行情
+        is_consolidating = self.is_consolidation(close_prices, atr)
         
         # 创建增强信号字典
         enhanced = result.copy()
         
-        # 添加建议
+        # 添加交易信号和建议
         if signal_type == SignalType.BUY.value:
             if trend_aligned:
                 enhanced['advice'] = "强烈建议买入"
                 enhanced['position_ratio'] = 0.5
                 enhanced['confidence'] = "高"
+            elif is_consolidating and short_trend == TrendDirection.UPTREND.value:
+                enhanced['advice'] = "震荡行情，逢低买入"
+                enhanced['position_ratio'] = 0.3
+                enhanced['confidence'] = "中"
             else:
                 enhanced['advice'] = "建议小仓位买入"
                 enhanced['position_ratio'] = 0.2
@@ -174,6 +304,10 @@ class TrendAnalyzer:
                 enhanced['advice'] = "强烈建议卖出"
                 enhanced['position_ratio'] = 0.5
                 enhanced['confidence'] = "高"
+            elif is_consolidating and short_trend == TrendDirection.DOWNTREND.value:
+                enhanced['advice'] = "震荡行情，逢高卖出"
+                enhanced['position_ratio'] = 0.3
+                enhanced['confidence'] = "中"
             else:
                 enhanced['advice'] = "建议小仓位卖出"
                 enhanced['position_ratio'] = 0.2
@@ -182,6 +316,18 @@ class TrendAnalyzer:
             enhanced['advice'] = "建议观望"
             enhanced['position_ratio'] = 0.0
             enhanced['confidence'] = "低"
+        
+        # 添加ATR信息
+        enhanced['atr'] = atr
+        enhanced['is_consolidating'] = is_consolidating
+        
+        # 检查是否需要平仓
+        if self.position_manager.current_position:
+            if self.position_manager.should_close_position(current_price):
+                enhanced['should_close'] = True
+                enhanced['close_reason'] = "达到止损或止盈"
+            else:
+                enhanced['should_close'] = False
         
         # 添加市场状态总结
         market_state = self.summarize_market_state(result)
@@ -193,6 +339,8 @@ class TrendAnalyzer:
         self.logger.info(f"建议操作: {enhanced['advice']}")
         self.logger.info(f"建议仓位: {enhanced['position_ratio']}")
         self.logger.info(f"信号置信度: {enhanced['confidence']}")
+        self.logger.info(f"ATR: {atr}")
+        self.logger.info(f"是否震荡: {is_consolidating}")
         self.logger.info(f"市场状态: {market_state}")
         
         return enhanced
