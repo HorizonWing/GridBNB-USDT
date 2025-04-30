@@ -6,6 +6,8 @@ load_dotenv()
 
 # 交易模式配置
 USE_TREND_TRADING = os.getenv('USE_TREND_TRADING', 'true').lower() == 'true'  # 默认使用趋势交易
+ENABLE_GRID_TRADING = os.getenv('ENABLE_GRID_TRADING', 'false').lower() == 'true'  # 网格交易开关，默认关闭
+ENABLE_TREND_TRADING = os.getenv('ENABLE_TREND_TRADING', 'true').lower() == 'true'  # 趋势交易开关，默认开启
 
 ENABLE_SIGNAL_PUSH = os.getenv('ENABLE_SIGNAL_PUSH', True)
 PUSH_URL = os.getenv('PUSH_URL')
@@ -62,6 +64,8 @@ except ValueError:
 class TradingConfig:
     # 系统配置
     USE_TREND_TRADING = USE_TREND_TRADING
+    ENABLE_GRID_TRADING = ENABLE_GRID_TRADING
+    ENABLE_TREND_TRADING = ENABLE_TREND_TRADING
     
     RISK_PARAMS = {
         'max_drawdown': MAX_DRAWDOWN,

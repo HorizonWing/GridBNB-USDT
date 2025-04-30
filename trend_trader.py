@@ -533,28 +533,41 @@ class TrendTrader:
             while self.is_running:
                 try:
                     # 更新价格数据
+                    self.logger.info("开始更新价格数据...")
                     await self.update_price_data()
+                    self.logger.info("价格数据更新完成")
                     
                     # 计算ATR
+                    self.logger.info("开始计算ATR...")
                     await self.calculate_atr()
+                    self.logger.info(f"ATR计算完成，当前ATR值: {self.current_atr}")
                     
                     # 运行趋势分析
+                    self.logger.info("开始运行趋势分析...")
                     signal = await self.trend_analyzer.run_analysis()
+                    self.logger.info(f"趋势分析完成，信号: {signal}")
                     
                     # 更新当前价格到信号中
                     if self.price_data['15m']['close']:
                         signal['current_price'] = self.price_data['15m']['close'][-1]
+                        self.logger.info(f"当前价格: {signal['current_price']}")
                     
                     # 如果有合约交易权限，执行交易操作
                     if has_futures_permission:
+                        self.logger.info("开始检查趋势反转...")
                         # 检查趋势反转
                         if await self.check_trend_reversal(signal):
+                            self.logger.info("检测到趋势反转，执行平仓操作")
                             await self.close_position("趋势反转")
+                        else:
+                            self.logger.info("未检测到趋势反转")
                         
                         # 检查开仓条件
+                        self.logger.info("开始检查开仓条件...")
                         await self.open_position(signal)
                         
                         # 检查止损止盈
+                        self.logger.info("开始检查止损止盈...")
                         await self.check_position()
                     else:
                         # 无合约交易权限，仅记录分析结果
@@ -564,6 +577,7 @@ class TrendTrader:
                     
                     # 更新上一次信号
                     self.last_signal = signal
+                    self.logger.info("本轮交易循环完成")
                 
                 except Exception as e:
                     self.logger.error(f"交易循环遇到错误: {str(e)}")
@@ -571,6 +585,7 @@ class TrendTrader:
                     self.logger.error(traceback.format_exc())
                 
                 # 等待下一轮
+                self.logger.info(f"等待{self.config.TREND_INTERVAL}秒进入下一轮交易循环...")
                 await asyncio.sleep(self.config.TREND_INTERVAL)
         
         except asyncio.CancelledError:
@@ -579,7 +594,6 @@ class TrendTrader:
         finally:
             self.is_running = False
             self.logger.info("交易循环已停止")
-    
     async def stop(self):
         """停止交易"""
         self.is_running = False
@@ -590,6 +604,15 @@ class TrendTrader:
         
         # 等待任务完成
         await asyncio.sleep(1)
+    
+    async def _get_latest_price(self):
+        """获取最新价格"""
+        try:
+            ticker = await self.exchange.fetch_ticker(self.symbol)
+            return ticker['last'] if ticker and 'last' in ticker else None
+        except Exception as e:
+            self.logger.error(f"获取最新价格失败: {str(e)}")
+            return None
 
 async def run_trend_trader(exchange: ExchangeClient, config: TradingConfig):
     """运行趋势交易系统"""

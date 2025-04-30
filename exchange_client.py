@@ -369,7 +369,6 @@ class ExchangeClient:
                 # 尝试直接获取持仓信息
                 positions = await self.exchange.fetch_positions(symbols, params)
                 
-                self.logger.info(f"获取持仓成功，共{len(positions)}个持仓")
                 return positions
             
             except Exception as e:
@@ -426,7 +425,6 @@ class ExchangeClient:
             server_time = await self.exchange.fetch_time()
             local_time = int(time.time() * 1000)
             self.time_diff = server_time - local_time
-            self.logger.info(f"时间同步完成 | 时差: {self.time_diff}ms")
         except Exception as e:
             self.logger.error(f"时间同步失败: {str(e)}")
 

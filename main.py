@@ -53,53 +53,64 @@ async def main():
             else:
                 logging.warning(f"API权限检查过程中发生未知错误: {str(e)}")
         
-        # 根据配置选择使用网格交易或趋势交易
-        use_trend_trading = config.USE_TREND_TRADING if hasattr(config, 'USE_TREND_TRADING') else True
+        # 初始化交易器
+        # 根据配置决定初始化哪种交易器
+        trend_trader = None
+        grid_trader = None
+        tasks = []
         
-        if use_trend_trading:
-            # 使用趋势交易系统
-            logging.info("启动趋势交易系统")
-            trader = TrendTrader(exchange, config)
-            # 初始化交易器
-            await trader.initialize()
+        # 根据选择初始化相应的交易器
+        if config.USE_TREND_TRADING:
+            # 初始化趋势交易器
+            logging.info("初始化趋势交易系统")
+            trend_trader = TrendTrader(exchange, config)
+            await trend_trader.initialize()
             
-            # 启动Web服务器
-            web_server_task = asyncio.create_task(start_web_server(trader))
-            
-            # 启动交易循环
-            trading_task = asyncio.create_task(trader.trading_loop())
-            
-            # 等待所有任务完成
-            await asyncio.gather(web_server_task, trading_task)
+            # 仅当启用趋势交易时，才添加交易任务
+            if config.ENABLE_TREND_TRADING:
+                logging.info("启用趋势交易循环")
+                tasks.append(asyncio.create_task(trend_trader.trading_loop()))
+            else:
+                logging.info("趋势交易已初始化但未启用交易功能，仅监控模式")
+                
+            # 交易器用于Web服务器显示状态
+            trader = trend_trader
         else:
-            # 使用网格交易系统
-            logging.info("启动网格交易系统")
-            # 使用正确的参数初始化交易器
-            trader = GridTrader(exchange, config)
+            # 初始化网格交易器
+            logging.info("初始化网格交易系统")
+            grid_trader = GridTrader(exchange, config)
+            await grid_trader.initialize()
             
-            # 初始化交易器
-            await trader.initialize()
-
-            # 启动趋势分析
+            # 仅当启用网格交易时，才添加交易任务
+            if config.ENABLE_GRID_TRADING:
+                logging.info("启用网格交易循环")
+                tasks.append(asyncio.create_task(grid_trader.main_loop()))
+            else:
+                logging.info("网格交易已初始化但未启用交易功能，仅监控模式")
+                
+            # 启动趋势分析（如果启用）
             if config.ENABLE_TREND_ANALYZER:
-                trend_analyzer_task = asyncio.create_task(start_trend_analyzer(symbol=config.SYMBOL,
-                                                                           simulation_mode=False,
-                                                                           output_dir=config.TREND_OUTPUT_DIR,
-                                                                           interval=config.TREND_INTERVAL))
+                trend_analyzer_task = asyncio.create_task(
+                    start_trend_analyzer(
+                        symbol=config.SYMBOL,
+                        simulation_mode=False,
+                        output_dir=config.TREND_OUTPUT_DIR,
+                        interval=config.TREND_INTERVAL
+                    )
+                )
+                tasks.append(trend_analyzer_task)
             else:
                 logging.info("趋势分析未启用")
-            
-            # 启动Web服务器
-            web_server_task = asyncio.create_task(start_web_server(trader))
-            
-            # 启动交易循环
-            trading_task = asyncio.create_task(trader.main_loop())
-            
-            # 等待所有任务完成
-            if config.ENABLE_TREND_ANALYZER:
-                await asyncio.gather(web_server_task, trading_task, trend_analyzer_task)
-            else:
-                await asyncio.gather(web_server_task, trading_task)
+                
+            # 交易器用于Web服务器显示状态
+            trader = grid_trader
+        
+        # 启动Web服务器
+        web_server_task = asyncio.create_task(start_web_server(trader))
+        tasks.append(web_server_task)
+        
+        # 等待所有任务完成
+        await asyncio.gather(*tasks)
         
     except Exception as e:
         error_msg = f"启动失败: {str(e)}\n{traceback.format_exc()}"
@@ -107,12 +118,12 @@ async def main():
         send_pushplus_message(error_msg, "致命错误")
         
     finally:
-        if 'trader' in locals():
-            try:
-                await trader.exchange.close()
-                logging.info("交易所连接已关闭")
-            except Exception as e:
-                logging.error(f"关闭连接时发生错误: {str(e)}")
+        # 关闭连接
+        try:
+            await exchange.close()
+            logging.info("交易所连接已关闭")
+        except Exception as e:
+            logging.error(f"关闭连接时发生错误: {str(e)}")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

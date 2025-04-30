@@ -62,12 +62,34 @@ class TrendAnalyzerRunner:
                 
             self.exchange = exchange_class(exchange_config)
             
-            # 检查交易所是否支持该交易对
-            await self.exchange.load_markets()
-            if self.symbol not in self.exchange.symbols:
-                raise ValueError(f"交易所不支持该交易对: {self.symbol}")
-                
-            self.logger.info(f"交易所连接成功，交易对: {self.symbol}")
+            # 添加重试机制以处理请求超时
+            max_retries = 3
+            retry_delay = 2  # 秒
+            
+            for attempt in range(max_retries):
+                try:
+                    # 检查交易所是否支持该交易对
+                    await self.exchange.load_markets()
+                    
+                    if self.symbol not in self.exchange.symbols:
+                        raise ValueError(f"交易所不支持该交易对: {self.symbol}")
+                    
+                    self.logger.info(f"交易所连接成功，交易对: {self.symbol}")
+                    return
+                    
+                except Exception as e:
+                    if "timeout" in str(e).lower() or "request timeout" in str(e).lower():
+                        if attempt < max_retries - 1:
+                            self.logger.warning(f"连接超时，正在重试 ({attempt + 1}/{max_retries}): {str(e)}")
+                            await asyncio.sleep(retry_delay)
+                            # 增加重试延迟
+                            retry_delay *= 1.5
+                        else:
+                            self.logger.error(f"尝试连接交易所失败，已达到最大重试次数: {str(e)}")
+                            raise
+                    else:
+                        self.logger.error(f"连接交易所失败: {str(e)}")
+                        raise
         else:
             self.logger.info("使用模拟模式，无需连接交易所")
     
