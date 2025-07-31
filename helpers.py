@@ -7,7 +7,7 @@ import psutil
 import os
 from logging.handlers import TimedRotatingFileHandler
 
-def format_trade_message(side, symbol, price, amount, total, grid_size, base_asset, quote_asset, retry_count=None):
+def format_trade_message(side, symbol, price, amount, total, grid_size, base_asset, quote_asset, retry_count=None, is_simulation=False):
     """格式化交易消息为美观的文本格式
 
     Args:
@@ -20,6 +20,7 @@ def format_trade_message(side, symbol, price, amount, total, grid_size, base_ass
         base_asset (str): 基础货币名称
         quote_asset (str): 计价货币名称
         retry_count (tuple, optional): 重试次数，格式为 (当前次数, 最大次数)
+        is_simulation (bool): 是否为虚拟交易
 
     Returns:
         str: 格式化后的消息文本
@@ -27,10 +28,13 @@ def format_trade_message(side, symbol, price, amount, total, grid_size, base_ass
     # 使用emoji增加可读性
     direction_emoji = "🟢" if side == 'buy' else "🔴"
     direction_text = "买入" if side == 'buy' else "卖出"
+    
+    # 虚拟交易标识
+    simulation_prefix = "🎯 [虚拟] " if is_simulation else ""
 
     # 构建消息主体
     message = f"""
-{direction_emoji} {direction_text} {symbol}
+{direction_emoji} {simulation_prefix}{direction_text} {symbol}
 ━━━━━━━━━━━━━━━━━━━━
 💰 价格：{price:.2f} {quote_asset}
 📊 数量：{amount:.4f} {base_asset}

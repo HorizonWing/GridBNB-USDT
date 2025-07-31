@@ -7,7 +7,8 @@ from trader import GridTrader
 from helpers import LogConfig, send_pushplus_message
 from web_server import start_web_server
 from exchange_client import ExchangeClient
-from config import TradingConfig, SYMBOLS_LIST
+from simulation_exchange import SimulationExchange
+from config import TradingConfig, SYMBOLS_LIST, settings
 
 async def periodic_global_status_logger(interval_seconds: int = 60):
     """
@@ -98,6 +99,18 @@ async def main():
 
         # 在主函数中创建唯一、共享的ExchangeClient实例
         shared_exchange_client = ExchangeClient()
+        
+        # 根据配置决定使用真实交易还是虚拟交易
+        if settings.SIMULATION:
+            logging.info("=" * 50)
+            logging.info("🎯 虚拟交易模式已启用")
+            logging.info(f"📊 初始虚拟资金: {settings.SIMULATION_INITIAL_BALANCE} USDT")
+            logging.info("⚠️  注意：所有交易都是虚拟的，不会影响真实资金")
+            logging.info("=" * 50)
+            # 使用虚拟交易所包装真实交易所
+            shared_exchange_client = SimulationExchange(shared_exchange_client)
+        else:
+            logging.info("💰 真实交易模式已启用")
 
         # 【新增】启动周期性时间同步任务
         await shared_exchange_client.start_periodic_time_sync()
@@ -134,7 +147,8 @@ async def main():
         tasks.append(global_status_task)
 
         # 并发运行所有任务
-        logging.info(f"开始并发运行 {len(SYMBOLS_LIST)} 个交易对及其他后台任务...")
+        mode_text = "虚拟交易" if settings.SIMULATION else "真实交易"
+        logging.info(f"开始并发运行 {len(SYMBOLS_LIST)} 个交易对及其他后台任务...({mode_text}模式)")
         await asyncio.gather(*tasks)
 
     except Exception as e:
@@ -152,6 +166,43 @@ async def main():
                 logging.error(f"关闭共享连接时发生错误: {str(e)}")
 
         logging.info("所有交易任务已结束。程序即将退出。")
+        
+        # 如果是虚拟交易模式，输出交易总结
+        if settings.SIMULATION and hasattr(shared_exchange_client, 'get_simulation_summary'):
+            try:
+                summary = shared_exchange_client.get_simulation_summary()
+                logging.info("=" * 60)
+                logging.info("🎯 虚拟交易总结报告")
+                logging.info(f"📊 总交易次数: {summary.get('total_trades', 0)}")
+                logging.info(f"💰 初始资金: {summary.get('initial_balance', 0)} USDT")
+                
+                current_balances = summary.get('current_balances', {})
+                funding_balances = summary.get('funding_balances', {})
+                
+                logging.info("📈 当前资产分布:")
+                for asset, balance in current_balances.items():
+                    if balance > 0:
+                        logging.info(f"   现货 {asset}: {balance:.8f}")
+                        
+                for asset, balance in funding_balances.items():
+                    if balance > 0:
+                        logging.info(f"   理财 {asset}: {balance:.8f}")
+                
+                # 计算总资产价值变化
+                try:
+                    final_value = await shared_exchange_client.calculate_total_account_value()
+                    initial_value = summary.get('initial_balance', 0)
+                    profit_loss = final_value - initial_value
+                    profit_percentage = (profit_loss / initial_value * 100) if initial_value > 0 else 0
+                    
+                    logging.info(f"💹 总资产价值: {final_value:.2f} USDT")
+                    logging.info(f"📊 盈亏: {profit_loss:+.2f} USDT ({profit_percentage:+.2f}%)")
+                except:
+                    pass
+                    
+                logging.info("=" * 60)
+            except Exception as e:
+                logging.error(f"生成虚拟交易总结失败: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

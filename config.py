@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # --- 可选配置 (从 .env 读取) ---
     PUSHPLUS_TOKEN: Optional[str] = None
 
+    # 虚拟交易配置 (从 .env 读取)
+    SIMULATION: bool = False  # 虚拟交易开关
+    SIMULATION_INITIAL_BALANCE: float = 10000.0  # 虚拟交易初始金额(USDT)
+
     # 理财功能开关
     ENABLE_SAVINGS_FUNCTION: bool = True
 

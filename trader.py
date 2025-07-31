@@ -55,6 +55,11 @@ class GridTrader:
 
         # 日志也带上交易对标识
         self.logger = logging.getLogger(f"{self.__class__.__name__}[{self.symbol}]")
+        
+        # 检查是否为虚拟交易模式
+        self.is_simulation = hasattr(exchange, 'simulation_balances')
+        if self.is_simulation:
+            self.logger.info(f"🎯 {self.symbol} 虚拟交易模式已启用")
 
         self.symbol_info = None
         self.amount_precision = None  # 数量精度
@@ -267,8 +272,9 @@ class GridTrader:
 
             # 发送启动通知
             threshold = FLIP_THRESHOLD(self.grid_size)  # 计算实际阈值
+            mode_text = "🎯 虚拟交易" if self.is_simulation else "💰 真实交易"
             send_pushplus_message(
-                f"网格交易启动成功\n"
+                f"{mode_text}启动成功\n"
                 f"交易对: {self.symbol}\n"
                 f"基准价: {self.base_price} {self.quote_asset}\n"
                 f"网格大小: {self.grid_size}%\n"
@@ -781,13 +787,16 @@ class GridTrader:
             grid_size=self.grid_size,
             base_asset=self.base_asset,
             quote_asset=self.quote_asset,
-            retry_count=(retry_count + 1, max_retries)
+            retry_count=(retry_count + 1, max_retries),
+            is_simulation=self.is_simulation
         )
         send_pushplus_message(msg, "交易成功通知")
 
-        # 6) 将多余资金转入理财 (如果功能开启)
-        if settings.ENABLE_SAVINGS_FUNCTION:
+        # 6) 将多余资金转入理财 (如果功能开启且不是虚拟交易)
+        if settings.ENABLE_SAVINGS_FUNCTION and not self.is_simulation:
             await self._transfer_excess_funds()
+        elif self.is_simulation:
+            self.logger.info("虚拟交易模式，跳过理财资金转移。")
         else:
             self.logger.info("理财功能已禁用，跳过资金转移。")
 
@@ -1035,7 +1044,8 @@ class GridTrader:
                 total=total,
                 grid_size=self.grid_size,
                 base_asset=self.base_asset,
-                quote_asset=self.quote_asset
+                quote_asset=self.quote_asset,
+                is_simulation=self.is_simulation
             )
             send_pushplus_message(message, "交易执行通知")
         except Exception as e:
@@ -1487,6 +1497,10 @@ class GridTrader:
 
     async def _transfer_excess_funds(self):
         """将超出总资产16%目标的部分资金转回理财账户"""
+        # 虚拟交易模式下跳过理财功能
+        if self.is_simulation:
+            return
+            
         # 功能开关检查
         if not settings.ENABLE_SAVINGS_FUNCTION:
             return
@@ -1622,6 +1636,11 @@ class GridTrader:
 
     async def _check_and_transfer_initial_funds(self):
         """检查并划转初始资金"""
+        # 虚拟交易模式下跳过理财功能
+        if self.is_simulation:
+            self.logger.info("虚拟交易模式，跳过初始资金检查与划转。")
+            return
+            
         # 功能开关检查
         if not settings.ENABLE_SAVINGS_FUNCTION:
             self.logger.info("理财功能已禁用，跳过初始资金检查与划转。")
@@ -2030,7 +2049,8 @@ class GridTrader:
                 grid_size=self.grid_size,
                 base_asset=self.base_asset,
                 quote_asset=self.quote_asset,
-                retry_count=retry_count
+                retry_count=retry_count,
+                is_simulation=self.is_simulation
             )
 
             send_pushplus_message(message, "交易执行通知")
